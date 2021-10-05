@@ -1,0 +1,683 @@
+
+R version 3.5.2 (2018-12-20) -- "Eggshell Igloo"
+Copyright (C) 2018 The R Foundation for Statistical Computing
+Platform: x86_64-redhat-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> ###########################################################################
+> # Unit tests using the abortion2000 data
+> ###########################################################################
+> library(cvam)
+> # Create the coarsened factor RH, as described in the vignette
+> CenRace <- abortion2000$CenRace
+> Hisp <- abortion2000$Hisp
+> CenRace <- addNA(CenRace)
+> Hisp <- addNA(Hisp)
+> RH <- Hisp:CenRace
+> RH <- droplevels(RH)
+> levels(RH) <- list(
++    nonHispWhite = "nonHisp:White",
++    nonHispBlack = "nonHisp:Black",
++    nonHispOther = "nonHisp:Other",
++    Hisp = c("Hisp:White", "Hisp:Black", "Hisp:Hisp", "Hisp:Other", "Hisp:NA"),
++    nonHispNA = "nonHisp:NA",
++    NAWhite = "NA:White" )
+> RH  <- coarsened( RH, levelsList = list(
++    nonHispNA = c("nonHispWhite", "nonHispBlack", "nonHispOther"), 
++    NAWhite = c("nonHispWhite", "Hisp" ) ) )
+> abortion2000$RH <- RH
+> 
+> # plain table
+> print( summary(RH) )
+nonHispWhite nonHispBlack nonHispOther         Hisp    nonHispNA      NAWhite 
+        1042          198           44          212         1320            1 
+        <NA> 
+           0 
+> 
+> # functions for extracting attributes
+> print( baseLevels(RH) )
+[1] "nonHispWhite" "nonHispBlack" "nonHispOther" "Hisp"        
+> print( nBaseLevels(RH) )
+[1] 4
+> print( coarseLevels(RH) )
+[1] "nonHispNA" "NAWhite"   NA         
+> print( nCoarseLevels(RH) )
+[1] 3
+> print( mapping(RH) )
+          nonHispWhite nonHispBlack nonHispOther Hisp
+nonHispNA            1            1            1    0
+NAWhite              1            0            0    1
+<NA>                 1            1            1    1
+> print( is.latentFactor(RH) )
+[1] FALSE
+> 
+> # is.naCoarsened
+> print( table(is.naCoarsened(RH)) )
+
+FALSE 
+ 2817 
+> RH2 <- RH
+> RH2[1:10] <- NA
+> print( table(is.naCoarsened(RH2)) )
+
+FALSE  TRUE 
+ 2807    10 
+> 
+> 
+> # put in a data frame, make sure that attributes are preserved
+> dF <- data.frame( RH, freq=1 )
+> print( head(dF) )
+            RH freq
+1    nonHispNA    1
+2         Hisp    1
+3    nonHispNA    1
+4 nonHispWhite    1
+5 nonHispWhite    1
+6 nonHispWhite    1
+> print( identical( attributes(RH), attributes(dF$RH) ) ) 
+[1] TRUE
+> 
+> # table, xtabs, ftable
+> PolViews <- abortion2000$PolViews
+> # there are some missing values
+> print( table( is.na(PolViews) ) )
+
+FALSE  TRUE 
+ 2644   173 
+> # but the NAs don't show up in a table
+> print( table(RH, PolViews) )
+              PolViews
+RH             Con Mod Lib
+  nonHispWhite 337 373 274
+  nonHispBlack  44  90  45
+  nonHispOther   9  21  11
+  Hisp          59  74  63
+  nonHispNA    440 496 307
+  NAWhite        1   0   0
+  <NA>           0   0   0
+> # show the NAs
+> print( table(RH, PolViews, exclude=NULL) )
+              PolViews
+RH             Con Mod Lib <NA>
+  nonHispWhite 337 373 274   58
+  nonHispBlack  44  90  45   19
+  nonHispOther   9  21  11    3
+  Hisp          59  74  63   16
+  nonHispNA    440 496 307   77
+  NAWhite        1   0   0    0
+  <NA>           0   0   0    0
+> print( table(RH, PolViews = addNA(PolViews) ) )
+              PolViews
+RH             Con Mod Lib <NA>
+  nonHispWhite 337 373 274   58
+  nonHispBlack  44  90  45   19
+  nonHispOther   9  21  11    3
+  Hisp          59  74  63   16
+  nonHispNA    440 496 307   77
+  NAWhite        1   0   0    0
+  <NA>           0   0   0    0
+> print( table(RH, PolViews = coarsened(PolViews) ) )
+              PolViews
+RH             Con Mod Lib <NA>
+  nonHispWhite 337 373 274   58
+  nonHispBlack  44  90  45   19
+  nonHispOther   9  21  11    3
+  Hisp          59  74  63   16
+  nonHispNA    440 496 307   77
+  NAWhite        1   0   0    0
+  <NA>           0   0   0    0
+> # with xtabs
+> print( xtabs( ~ RH + PolViews, addNA=TRUE) )
+              PolViews
+RH             Con Mod Lib <NA>
+  nonHispWhite 337 373 274   58
+  nonHispBlack  44  90  45   19
+  nonHispOther   9  21  11    3
+  Hisp          59  74  63   16
+  nonHispNA    440 496 307   77
+  NAWhite        1   0   0    0
+  <NA>           0   0   0    0
+> # ftable
+> Sex <- abortion2000$Sex
+> print( ftable( addNA(PolViews) ~ Sex + RH, exclude=NULL ) )
+                    addNA(PolViews) Con Mod Lib  NA
+Sex    RH                                          
+Female nonHispWhite                 163 214 154  41
+       nonHispBlack                  34  52  26  10
+       nonHispOther                   4  15   6   1
+       Hisp                          29  41  45   9
+       nonHispNA                    214 299 177  53
+       NAWhite                        1   0   0   0
+       NA                             0   0   0   0
+Male   nonHispWhite                 174 159 120  17
+       nonHispBlack                  10  38  19   9
+       nonHispOther                   5   6   5   2
+       Hisp                          30  33  18   7
+       nonHispNA                    226 197 130  24
+       NAWhite                        0   0   0   0
+       NA                             0   0   0   0
+> # dropping the coarse levels
+> print( table( RH=dropCoarseLevels(RH), PolViews) )
+              PolViews
+RH             Con Mod Lib
+  nonHispWhite 337 373 274
+  nonHispBlack  44  90  45
+  nonHispOther   9  21  11
+  Hisp          59  74  63
+> 
+> # grouping data
+> groupedData = as.data.frame( xtabs( ~ Age + Sex + CenRace + Hisp,
++    data=abortion2000, addNA=TRUE) )
+> groupedData <- subset( groupedData, Freq > 0 ) 
+> print( dim(groupedData) )
+[1] 69  5
+> print( head(groupedData) )
+    Age    Sex CenRace    Hisp Freq
+1 18-29 Female   White nonHisp   96
+2 30-49 Female   White nonHisp  244
+3 50-64 Female   White nonHisp  114
+4   65+ Female   White nonHisp  115
+5  <NA> Female   White nonHisp    3
+6 18-29   Male   White nonHisp   91
+> 
+> CenRace <- addNA(groupedData$CenRace)
+> Hisp <- addNA(groupedData$Hisp)
+> RH <- Hisp:CenRace
+> RH <- droplevels(RH)
+> levels(RH) <- list(
++    nonHispWhite = "nonHisp:White",
++    nonHispBlack = "nonHisp:Black",
++    nonHispOther = "nonHisp:Other",
++    Hisp = c("Hisp:White", "Hisp:Black", "Hisp:Hisp", "Hisp:Other", "Hisp:NA"),
++    nonHispNA = "nonHisp:NA",
++    NAWhite = "NA:White" )
+> RH  <- coarsened( RH, levelsList = list(
++    nonHispNA = c("nonHispWhite", "nonHispBlack", "nonHispOther"), 
++    NAWhite = c("nonHispWhite", "Hisp" ) ) )
+> groupedData$RH <- RH
+> print( aggregate( Freq ~ RH, FUN=sum, data=groupedData) )
+            RH Freq
+1 nonHispWhite 1042
+2 nonHispBlack  198
+3 nonHispOther   44
+4         Hisp  212
+5    nonHispNA 1320
+6      NAWhite    1
+> 
+> # aggregate
+> dFaggr <- aggregate( freq ~ RH, FUN=sum, data=dF )
+> print( identical( attributes(dF$RH), attributes(dFaggr$RH) ) ) 
+[1] TRUE
+> 
+> # quickly written function that accepts a single coarsened factor,
+> # optionally with frequencies, and computes ML estimates for the
+> # base-level probabilities. This function is used for unit testing.
+> quickEM <- function( obj, freq = rep(1, length(obj)),
++    maxits=1000, eps=1e-06 ){
++    # identify the name of the coarsened factor
++    mc <- match.call()
++    objName <- as.character( mc[[2]] )
++    if( objName == "freq" ) stop( gettext(
++       "Main argument cannot be named 'freq'"), domain = NA )
++    # check args
++    stopifnot( inherits(obj, "coarsened") )
++    stopifnot( length(freq)==length(obj) )
++    stopifnot( all( !is.na(freq) ) )
++    stopifnot( all(freq>=0) )
++    stopifnot( maxits > 0 )
++    # aggregate the data to create model frame, then 
++    # pull out the coarsened factor and frequencies
++ #   obj <- sticky::sticky(obj)
++    mf <- aggregate( freq ~ obj, FUN=sum )
++    names(mf)[ names(mf)=="obj" ] <- objName
++    cFac <- mf[[objName]]
++    freq <- mf[["freq"]]
++    # starting value: uniform probabilities
++    theta <- rep( 1 / nBaseLevels(cFac), nBaseLevels(cFac) )
++    names(theta) <- baseLevels(cFac)
++    # prepare for iteration
++    Ex <- theta.new <- theta
++    iter <- 0
++    converged <- FALSE
++    llvec <- numeric(maxits)
++    llvec[] <- NA
++    while( ( ! converged ) & ( iter < maxits ) ) {
++       iter <- iter + 1
++       theta <- theta.new
++       Ex[] <- loglik <- 0
++       # e-step
++       for( i in seq_along(cFac) ){
++          iC <- as.integer( cFac[i] )
++          if( iC %in% attr(cFac,"baseLevelCodes") ) {
++             Ex[iC] <- Ex[iC] + freq[i]
++             loglik <- loglik + freq[i] * log( theta[iC] )
++          } else {
++             w <- match(iC, attr(cFac, "coarseLevelCodes") )
++             w <- ( mapping(cFac)[w,] == 1 )
++             Ex[w] <- Ex[w] + freq[i] * theta[w] / sum( theta[w] )
++             loglik <- loglik + freq[i] * log( sum(theta[w]) )
++          }
++       }
++       llvec[iter] <- loglik
++       names(loglik) <- NULL
++       # m-step
++       theta.new <- Ex / sum(Ex)
++       # convergence check
++       converged <- all( abs(theta.new-theta) <= eps*abs(theta) )      
++    }
++    list( theta=theta, iter=iter, converged=converged, 
++       llvec=llvec[1:iter], loglik=loglik )
++ }
+> 
+> # run quickEM on microdata
+> RH <- abortion2000$RH
+> resultA <- quickEM(RH, eps=1e-08)
+> print(resultA)
+$theta
+nonHispWhite nonHispBlack nonHispOther         Hisp 
+  0.75055014   0.14249465   0.03166548   0.07528973 
+
+$iter
+[1] 31
+
+$converged
+[1] TRUE
+
+$llvec
+ [1] -2454.330 -1692.400 -1556.179 -1510.445 -1495.232 -1490.464 -1489.067
+ [8] -1488.679 -1488.575 -1488.548 -1488.541 -1488.539 -1488.539 -1488.539
+[15] -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539
+[22] -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539
+[29] -1488.539 -1488.539 -1488.539
+
+$loglik
+[1] -1488.539
+
+> 
+> # run cvam on microdata
+> resultB <- cvam( ~ RH, est = ~ RH, data=abortion2000 )
+> print( summary(resultB, showEst=TRUE) )
+~ RH
+
+Prior:
+      Flattening frequency = 0
+Total nuggets + flattening = 0
+              Ridge factor = 0
+          Intensity factor = 1
+
+Sample size:
+              total N in supplied data = 2817
+N from supplied data used in model fit = 2817
+           prior effective sample size =    0
+
+Degrees of freedom:
+    patterns of coarsened data = 6
+  cells in complete-data table = 4
+cells without latent variables = 4
+         structural zero cells = 0
+   parameters in Poisson model = 4
+                            df = 0
+
+Starting values:
+default, center
+jitter SD = 0.000000
+
+EM algorithm:
+Converged at iteration 31
+Gradient length = 0.000001
+
+  Final logP = 18071.1
+Final loglik = 18071.1
+
+Estimates from EM, with Hessian-based SEs
+               coef      SE  tstat   pval
+(Intercept)  5.8748 0.04323 135.89 0.0000
+RH1          1.7816 0.05046  35.31 0.0000
+RH2          0.1201 0.06776   1.77 0.0762
+RH3         -1.3839 0.11589 -11.94 0.0000
+
+Estimates and SE's from EM, linearized
+~ RH
+            RH   prob     SE prob.lower prob.upper
+1 nonHispWhite 0.7506 0.0109     0.7287     0.7712
+2 nonHispBlack 0.1425 0.0093     0.1251     0.1618
+3 nonHispOther 0.0317 0.0047     0.0237     0.0423
+4         Hisp 0.0753 0.0050     0.0661     0.0856
+> 
+> # run quickEM on grouped data
+> RH <- groupedData$RH
+> Freq <- groupedData$Freq
+> resultC <- quickEM(RH, Freq, eps=1e-08)
+> print(resultC)
+$theta
+nonHispWhite nonHispBlack nonHispOther         Hisp 
+  0.75055014   0.14249465   0.03166548   0.07528973 
+
+$iter
+[1] 31
+
+$converged
+[1] TRUE
+
+$llvec
+ [1] -2454.330 -1692.400 -1556.179 -1510.445 -1495.232 -1490.464 -1489.067
+ [8] -1488.679 -1488.575 -1488.548 -1488.541 -1488.539 -1488.539 -1488.539
+[15] -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539
+[22] -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539 -1488.539
+[29] -1488.539 -1488.539 -1488.539
+
+$loglik
+[1] -1488.539
+
+> 
+> # run cvam on grouped data
+> resultD <- cvam( ~ RH, est = ~ RH, data=groupedData, freq=Freq )
+> print( summary(resultD) )
+~ RH
+
+Prior:
+      Flattening frequency = 0
+Total nuggets + flattening = 0
+              Ridge factor = 0
+          Intensity factor = 1
+
+Sample size:
+              total N in supplied data = 2817
+N from supplied data used in model fit = 2817
+           prior effective sample size =    0
+
+Degrees of freedom:
+    patterns of coarsened data = 6
+  cells in complete-data table = 4
+cells without latent variables = 4
+         structural zero cells = 0
+   parameters in Poisson model = 4
+                            df = 0
+
+Starting values:
+default, center
+jitter SD = 0.000000
+
+EM algorithm:
+Converged at iteration 31
+Gradient length = 0.000001
+
+  Final logP = 18071.1
+Final loglik = 18071.1
+
+Estimates from EM, with Hessian-based SEs
+               coef      SE  tstat   pval
+(Intercept)  5.8748 0.04323 135.89 0.0000
+RH1          1.7816 0.05046  35.31 0.0000
+RH2          0.1201 0.06776   1.77 0.0762
+RH3         -1.3839 0.11589 -11.94 0.0000
+
+Estimates and SE's from EM, linearized
+~ RH
+            RH   prob     SE prob.lower prob.upper
+1 nonHispWhite 0.7506 0.0109     0.7287     0.7712
+2 nonHispBlack 0.1425 0.0093     0.1251     0.1618
+3 nonHispOther 0.0317 0.0047     0.0237     0.0423
+4         Hisp 0.0753 0.0050     0.0661     0.0856
+> 
+> 
+> 
+> ## four-way model
+> CenRace <- addNA(abortion2000$CenRace)
+> Hisp <- addNA(abortion2000$Hisp)
+> RH <- Hisp:CenRace
+> RH <- droplevels(RH)
+> levels(RH) <- list(
++    nonHispWhite = "nonHisp:White",
++    nonHispBlack = "nonHisp:Black",
++    nonHispOther = "nonHisp:Other",
++    Hisp = c("Hisp:White", "Hisp:Black", "Hisp:Hisp", "Hisp:Other", "Hisp:NA"),
++    nonHispNA = "nonHisp:NA",
++    NAWhite = "NA:White" )
+> RH  <- coarsened( RH, levelsList = list(
++    nonHispNA = c("nonHispWhite", "nonHispBlack", "nonHispOther"), 
++    NAWhite = c("nonHispWhite", "Hisp" ) ) )
+> 
+> # copy the four variables into a data frame
+> dF <- data.frame( Sex = abortion2000$Sex, RH = RH,
++    PolViews = abortion2000$PolViews, AbAny = abortion2000$AbAny )
+> 
+> myFormula <- ~ Sex*RH*PolViews + AbAny*Sex + AbAny*RH + AbAny*PolViews
+> myMod <- cvam( myFormula, data=dF )
+> satMod <- cvam( ~ Sex*RH*PolViews*AbAny, data=dF, saturated=TRUE )
+Note: Estimate at or near boundary
+> print( anova( myMod, satMod, pval=TRUE ) )
+Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
+Model 2: ~ Sex * RH * PolViews * AbAny
+  resid.df -2*loglik df change   pval
+1       34    -23618                 
+2        0    -23661 34 43.085 0.1366
+> print( anova( myMod, satMod, method="AIC" ) )
+Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
+Model 2: ~ Sex * RH * PolViews * AbAny
+  resid.df -2*loglik    AIC rank
+1       34    -23618 -23542    1
+2        0    -23661 -23517    2
+> # compute and summarize the fitted values
+> muHat <- get.fitted(myMod, type="mean")$fit
+> print( summary( muHat ) )
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+  0.8271   3.8323  11.8807  39.1250  27.9982 267.2953 
+> 
+> noSex <- cvam( ~ Sex*RH*PolViews + AbAny*RH + AbAny*PolViews, data=dF)
+> print( anova( noSex, myMod, pval=TRUE ) )
+Model 1: ~ Sex * RH * PolViews + AbAny * RH + AbAny * PolViews
+Model 2: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
+  resid.df -2*loglik df  change  pval
+1       36    -23617                 
+2       34    -23618  2 0.76848 0.681
+> noRH  <- cvam( ~ Sex*RH*PolViews + AbAny*Sex + AbAny*PolViews, data=dF)
+> print( anova( noRH, myMod, pval=TRUE ) )
+Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * PolViews
+Model 2: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
+  resid.df -2*loglik df change  pval
+1       40    -23601                
+2       34    -23618  6  16.56 0.011
+> noPol <- cvam( ~ Sex*RH*PolViews + AbAny*Sex + AbAny*RH, data=dF)
+> print( anova( noPol, myMod, pval=TRUE ) )
+Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH
+Model 2: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
+  resid.df -2*loglik df change pval
+1       38    -23533               
+2       34    -23618  4 84.486    0
+> 
+> # use a boundary criterion that is less strict
+> satMod <- cvam( ~ Sex*RH*PolViews*AbAny, data=dF, saturated=TRUE,
++    control=list(critBoundary=1e+06 ) )
+Note: Estimate at or near boundary
+> print( round( get.fitted(satMod, type="prob")$fit, 6) )
+ [1] 0.029066 0.039231 0.007533 0.002447 0.001595 0.003040 0.002963 0.000505
+ [9] 0.064676 0.054623 0.016674 0.006016 0.004029 0.001908 0.003721 0.003368
+[17] 0.066472 0.045043 0.009213 0.003694 0.001559 0.001708 0.007848 0.003118
+[25] 0.095406 0.095289 0.018363 0.005178 0.001465 0.000009 0.007574 0.010448
+[33] 0.095604 0.052460 0.022985 0.022681 0.007306 0.003610 0.010528 0.009189
+[41] 0.042217 0.036816 0.010613 0.009881 0.002851 0.000000 0.009341 0.003602
+[49] 0.005072 0.006238 0.001320 0.001171 0.000000 0.000980 0.000572 0.001010
+[57] 0.008873 0.007538 0.001618 0.000905 0.000001 0.000000 0.001497 0.000000
+[65] 0.005163 0.002090 0.000000 0.000832 0.000000 0.001656 0.000000 0.000000
+> 
+> myPrior <- cvamPrior( flatten=7.2 )
+> # re-fit and compare models using the flattening constant
+> myMod <- cvam( myFormula, data=dF, prior=myPrior )
+> satMod <- cvam( ~ Sex*RH*PolViews*AbAny, data=dF,
++    saturated=TRUE, prior=myPrior )
+> print( anova( myMod, satMod, pval=TRUE, method="logP") )
+Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
+Model 2: ~ Sex * RH * PolViews * AbAny
+  resid.df -2*logP df change   pval
+1       34  -23654                 
+2        0  -23692 34 38.646 0.2677
+> 
+> # re-run EM with a ridge factor of 0.5
+> fitEM <- cvam( ~ Sex * RH * PolViews * AbAny, data=dF )
+> fitEM.ridge <- cvam( ~ Sex * RH * PolViews * AbAny, data=dF,
++    prior=cvamPrior( ridge=.5 ) )
+> round( get.fitted(fitEM.ridge, type="prob", mfTrue=FALSE ), 5)
+ [1] 0.02909 0.03937 0.00755 0.00252 0.00157 0.00280 0.00297 0.00053 0.06469
+[10] 0.05455 0.01666 0.00601 0.00403 0.00202 0.00373 0.00336 0.06641 0.04503
+[19] 0.00919 0.00374 0.00165 0.00166 0.00783 0.00310 0.09536 0.09503 0.01834
+[28] 0.00515 0.00155 0.00045 0.00757 0.01043 0.09566 0.05265 0.02302 0.02269
+[37] 0.00721 0.00324 0.01052 0.00917 0.04230 0.03674 0.01059 0.00979 0.00278
+[46] 0.00025 0.00933 0.00361 0.00505 0.00622 0.00125 0.00118 0.00006 0.00096
+[55] 0.00057 0.00096 0.00881 0.00744 0.00155 0.00089 0.00013 0.00012 0.00147
+[64] 0.00004 0.00507 0.00213 0.00009 0.00085 0.00004 0.00159 0.00004 0.00003
+> print( head( get.coef(fitEM.ridge, withSE=TRUE) ) )
+                  coef        SE tstat   pval
+(Intercept)  2.2664510 0.1590153 14.25 0.0000
+Sex1         0.1349898 0.1590153  0.85 0.3959
+RH1          2.0025760 0.1675005 11.96 0.0000
+RH2          0.1415260 0.2112464  0.67 0.5029
+RH3         -1.3848754 0.3319072 -4.17 0.0000
+PolViews.L  -0.2525115 0.2610683 -0.97 0.3334
+> print( -2 * ( get.loglik(fitEM.ridge) - get.loglik(fitEM) ) )
+[1] 1.666639
+> print( exp( get.loglik(fitEM) - get.loglik(fitEM.ridge) ) )
+[1] 2.300944
+> 
+> set.seed(87900)
+> fitMCMC <- cvam( fitEM.ridge, method="MCMC" )
+Note: Metropolis-Hastings got stuck
+MCMC procedure aborted
+Iteration 26
+OCCURRED IN: run_da_log_linear in MOD cvam_engine
+> 
+> set.seed(87900)
+> fitMCMC <- cvam( fitEM.ridge, method="MCMC",
++    control=list( typeMCMC="RWM", tuneRWM=c(1000,.17) ) )
+> print( summary(fitMCMC) )
+~ Sex * RH * PolViews * AbAny
+
+Prior:
+      Flattening frequency = 0.0
+Total nuggets + flattening = 0.0
+              Ridge factor = 0.5
+          Intensity factor = 1.0
+
+Sample size:
+              total N in supplied data = 2817
+N from supplied data used in model fit = 2817
+           prior effective sample size =    0
+
+Degrees of freedom:
+    patterns of coarsened data = 139
+  cells in complete-data table =  72
+cells without latent variables =  72
+         structural zero cells =   0
+   parameters in Poisson model =  72
+                            df =   0
+
+Starting values:
+supplied by user 
+jitter SD = 0.000000
+
+MCMC: Random-walk Metropolis
+
+Tuning parameters:
+ proposal df = 1000
+scale factor = 0.17
+
+Accept rate = 0.3978
+
+              Iterations performed = 5000
+   Iterations discarded as burn-in =    0
+          Iterations after burn-in = 5000
+Thinning interval for saved series =    1
+           Samples in saved series = 5000
+               Imputation interval =    0
+      Number of imputations stored =    0
+
+Direct estimates and SE's from 5000 successive MCMC samples
+                                coef     SE tstat   pval
+(Intercept)                 1.921414 0.1666 11.53 0.0000
+Sex1                        0.130798 0.1268  1.03 0.3022
+RH1                         2.334836 0.1764 13.24 0.0000
+RH2                         0.251075 0.1603  1.57 0.1173
+RH3                        -1.521368 0.3114 -4.89 0.0000
+PolViews.L                 -0.521804 0.2390 -2.18 0.0290
+PolViews.Q                 -0.451947 0.2432 -1.86 0.0632
+AbAny1                      0.944653 0.1686  5.60 0.0000
+AbAny2                      1.360605 0.2113  6.44 0.0000
+Sex1:RH1                   -0.036966 0.1303 -0.28 0.7767
+Sex1:RH2                    0.051004 0.1894  0.27 0.7877
+Sex1:RH3                   -0.530215 0.2945 -1.80 0.0718
+Sex1:PolViews.L             0.044934 0.2812  0.16 0.8731
+Sex1:PolViews.Q            -0.338233 0.2967 -1.14 0.2543
+RH1:PolViews.L              0.293600 0.3088  0.95 0.3417
+RH2:PolViews.L             -0.008472 0.3743 -0.02 0.9819
+RH3:PolViews.L              0.461806 0.6385  0.72 0.4695
+RH1:PolViews.Q              0.116286 0.2406  0.48 0.6289
+RH2:PolViews.Q             -0.297875 0.3445 -0.86 0.3873
+RH3:PolViews.Q             -0.039247 0.5998 -0.07 0.9478
+Sex1:AbAny1                 0.131413 0.1497  0.88 0.3800
+Sex1:AbAny2                 0.198507 0.1483  1.34 0.1806
+RH1:AbAny1                 -0.299717 0.1775 -1.69 0.0912
+RH2:AbAny1                 -0.260726 0.1920 -1.36 0.1745
+RH3:AbAny1                  0.403143 0.3308  1.22 0.2230
+RH1:AbAny2                 -0.422886 0.2093 -2.02 0.0433
+RH2:AbAny2                  0.010860 0.2131  0.05 0.9593
+RH3:AbAny2                 -0.451926 0.3501 -1.29 0.1968
+PolViews.L:AbAny1           0.875276 0.2756  3.18 0.0015
+PolViews.Q:AbAny1           0.094822 0.2307  0.41 0.6811
+PolViews.L:AbAny2           0.268456 0.2672  1.00 0.3150
+PolViews.Q:AbAny2          -0.232132 0.2757 -0.84 0.3998
+Sex1:RH1:PolViews.L         0.221695 0.2938  0.75 0.4505
+Sex1:RH2:PolViews.L        -0.501291 0.3485 -1.44 0.1503
+Sex1:RH3:PolViews.L         0.049262 0.5269  0.09 0.9255
+Sex1:RH1:PolViews.Q         0.257477 0.2902  0.89 0.3749
+Sex1:RH2:PolViews.Q         0.281786 0.3801  0.74 0.4585
+Sex1:RH3:PolViews.Q        -0.192649 0.5054 -0.38 0.7031
+Sex1:RH1:AbAny1            -0.182770 0.1541 -1.19 0.2355
+Sex1:RH2:AbAny1             0.194456 0.2251  0.86 0.3876
+Sex1:RH3:AbAny1             0.254240 0.3368  0.75 0.4503
+Sex1:RH1:AbAny2            -0.178367 0.1512 -1.18 0.2381
+Sex1:RH2:AbAny2            -0.158674 0.2060 -0.77 0.4411
+Sex1:RH3:AbAny2             1.061104 0.3050  3.48 0.0005
+Sex1:PolViews.L:AbAny1     -0.056031 0.2811 -0.20 0.8420
+Sex1:PolViews.Q:AbAny1      0.341955 0.2918  1.17 0.2412
+Sex1:PolViews.L:AbAny2      0.084936 0.2768  0.31 0.7590
+Sex1:PolViews.Q:AbAny2      0.509445 0.3118  1.63 0.1023
+RH1:PolViews.L:AbAny1      -0.285015 0.3066 -0.93 0.3526
+RH2:PolViews.L:AbAny1      -0.267453 0.4174 -0.64 0.5217
+RH3:PolViews.L:AbAny1      -0.846778 0.6555 -1.29 0.1964
+RH1:PolViews.Q:AbAny1      -0.031421 0.2241 -0.14 0.8885
+RH2:PolViews.Q:AbAny1       0.095977 0.3721  0.26 0.7964
+RH3:PolViews.Q:AbAny1       0.087209 0.6140  0.14 0.8871
+RH1:PolViews.L:AbAny2      -0.647375 0.3298 -1.96 0.0497
+RH2:PolViews.L:AbAny2       0.286379 0.3961  0.72 0.4697
+RH3:PolViews.L:AbAny2      -0.385687 0.7537 -0.51 0.6089
+RH1:PolViews.Q:AbAny2       0.431110 0.2808  1.54 0.1247
+RH2:PolViews.Q:AbAny2       0.234821 0.3582  0.66 0.5121
+RH3:PolViews.Q:AbAny2      -0.873395 0.6488 -1.35 0.1782
+Sex1:RH1:PolViews.L:AbAny1  0.046725 0.3071  0.15 0.8791
+Sex1:RH2:PolViews.L:AbAny1  0.454769 0.3611  1.26 0.2079
+Sex1:RH3:PolViews.L:AbAny1  0.232850 0.4413  0.53 0.5978
+Sex1:RH1:PolViews.Q:AbAny1 -0.293160 0.2916 -1.01 0.3148
+Sex1:RH2:PolViews.Q:AbAny1 -0.249912 0.4618 -0.54 0.5884
+Sex1:RH3:PolViews.Q:AbAny1 -0.281149 0.5107 -0.55 0.5820
+Sex1:RH1:PolViews.L:AbAny2 -0.302171 0.2857 -1.06 0.2903
+Sex1:RH2:PolViews.L:AbAny2 -0.170657 0.4087 -0.42 0.6763
+Sex1:RH3:PolViews.L:AbAny2  0.445421 0.6067  0.73 0.4629
+Sex1:RH1:PolViews.Q:AbAny2 -0.644232 0.3170 -2.03 0.0421
+Sex1:RH2:PolViews.Q:AbAny2 -0.197045 0.4113 -0.48 0.6319
+Sex1:RH3:PolViews.Q:AbAny2  0.592037 0.6059  0.98 0.3285
+
+> 
+> proc.time()
+   user  system elapsed 
+  2.369   0.085   2.419 

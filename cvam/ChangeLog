@@ -1,0 +1,35 @@
+cvam ChangeLog
+
+04-22-2020
+	* consolidated arguments to fit_cvam_model
+
+04-26-2020
+	* added undocumented, non-exported function cvamMlogit for fitting
+	  multinomial logistic regression
+
+04-27-2020
+	* revised cvamMlogit
+	* created cvamMlogit.fit
+	* created fitLCPrev
+
+04-29-2020
+	* fixed run_mlogit to return final beta_vec
+
+04-30-2020
+	* added loglikelihood derivatives to fitLCPrev
+
+05-14-2020
+	* recreated cvam_init.c file to fix registration problems
+	* fixed issue with cvamMlogit with prior="DAP"; now throws an error
+	if the intercept-only model fails to converged
+
+05-18-2020
+	* fixed false convergence problem in fitLCPrev
+
+09-30-2021
+	* fixed DESCRIPTION and vignettes to address issues from CRAN
+
+10-01=2021
+	* fixed bug in cvamPredict
+	* changed DESCRIPTION to no longer suggest sticky
+

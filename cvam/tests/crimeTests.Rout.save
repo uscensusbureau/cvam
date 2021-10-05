@@ -1,0 +1,404 @@
+
+R version 3.5.2 (2018-12-20) -- "Eggshell Igloo"
+Copyright (C) 2018 The R Foundation for Statistical Computing
+Platform: x86_64-redhat-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> library(cvam)
+> # fit the model of independence
+> M0 <- cvam( ~ V1 + V2, freq=n, data=crime )
+> # fit the model of non-independence
+> M1 <- cvam( ~ V1 * V2, freq=n, data=crime )
+> # compare them
+> print( anova(M0,M1, pval=TRUE) )
+Model 1: ~ V1 + V2
+Model 2: ~ V1 * V2
+  resid.df -2*loglik df change pval
+1        1   -5853.2               
+2        0   -5878.6  1 25.382    0
+> 
+> print( summary(M0) )
+~ V1 + V2
+
+Prior:
+      Flattening frequency = 0
+Total nuggets + flattening = 0
+              Ridge factor = 0
+          Intensity factor = 1
+
+Sample size:
+              total N in supplied data = 756
+N from supplied data used in model fit = 641
+           prior effective sample size =   0
+
+Degrees of freedom:
+    patterns of coarsened data = 9
+  cells in complete-data table = 4
+cells without latent variables = 4
+         structural zero cells = 0
+   parameters in Poisson model = 3
+                            df = 1
+
+Starting values:
+default, center
+jitter SD = 0.000000
+
+EM algorithm:
+Converged at iteration 9
+Gradient length = 0.000000
+
+  Final logP = 2926.608
+Final loglik = 2926.608
+
+Estimates from EM, with Hessian-based SEs
+              coef      SE tstat pval
+(Intercept) 4.5677 0.06154 74.23    0
+V11         0.6808 0.05053 13.47    0
+V21         0.8037 0.05478 14.67    0
+
+> 
+> dF <- get.fitted(M0, type="mean")
+> print( dF )
+   V1  V2      freq      fit
+1  no  no 520.42720 501.3251
+2 yes  no 109.36244 128.4646
+3  no yes  81.36384 100.4660
+4 yes yes  44.84651  25.7444
+> print( ( dF$fit[1] * dF$fit[4] ) / ( dF$fit[2] * dF$fit[3] ) )
+[1] 1
+> 
+> # compute the quasi-Pearson residuals
+> muHat <- get.fitted(M0, type="mean")$fit
+> fHatSat <- get.fitted(M1, type="mean")$freq
+> quasiPearson <- ( fHatSat - muHat ) / sqrt( muHat )
+> print( quasiPearson )
+[1]  1.147826 -2.277402 -2.584121  5.126983
+> 
+> # fit the saturated model to the crime data
+> result <- cvam( ~ V1 * V2, data=crime, freq=n)
+> # run it again, starting from the previous result
+> result <- cvam(result)
+> print( summary(result, showCoef=FALSE) )
+~ V1 * V2
+
+Prior:
+      Flattening frequency = 0
+Total nuggets + flattening = 0
+              Ridge factor = 0
+          Intensity factor = 1
+
+Sample size:
+              total N in supplied data = 756
+N from supplied data used in model fit = 641
+           prior effective sample size =   0
+
+Degrees of freedom:
+    patterns of coarsened data = 9
+  cells in complete-data table = 4
+cells without latent variables = 4
+         structural zero cells = 0
+   parameters in Poisson model = 4
+                            df = 0
+
+Starting values:
+supplied by user 
+jitter SD = 0.000000
+
+EM algorithm:
+Converged at iteration 1
+Gradient length = 0.000000
+
+  Final logP = 2939.299
+Final loglik = 2939.299
+
+> 
+> # fit the model of non-independence
+> fit <- cvam( ~ V1 * V2, data=crime, freq=n )
+> # display predictions for V1
+> print( cvamPredict( ~ V1, fit, data=crime ) )
+         no       yes
+1 1.0000000 0.0000000
+2 0.0000000 1.0000000
+3 0.8369768 0.1630232
+4 1.0000000 0.0000000
+5 0.0000000 1.0000000
+6 0.5902705 0.4097295
+7 1.0000000 0.0000000
+8 0.0000000 1.0000000
+9 0.7957538 0.2042462
+> # display predicted frequencies for V1
+> print( cvamPredict( ~ V1, fit, data=crime, freq=n ) )
+          no       yes
+1 392.000000  0.000000
+2   0.000000 76.000000
+3  25.946282  5.053718
+4  55.000000  0.000000
+5   0.000000 38.000000
+6   4.131894  2.868106
+7  33.000000  0.000000
+8   0.000000  9.000000
+9  91.511685 23.488315
+> 
+> # display predicted frequencies for V1 and V2
+> print( cvamPredict( ~ V1 + V2, fit, data=crime, freq=n ) )
+      no.no    yes.no    no.yes   yes.yes
+1 392.00000  0.000000  0.000000  0.000000
+2   0.00000 76.000000  0.000000  0.000000
+3  25.94628  5.053718  0.000000  0.000000
+4   0.00000  0.000000 55.000000  0.000000
+5   0.00000  0.000000  0.000000 38.000000
+6   0.00000  0.000000  4.131894  2.868106
+7  28.90978  0.000000  4.090215  0.000000
+8   0.00000  5.983207  0.000000  3.016793
+9  80.16919 15.615049 11.342500  7.873266
+> 
+> set.seed(69852)
+> print( cvamImpute( fit, data=crime ) )
+   V1  V2
+1  no  no
+2 yes  no
+3  no  no
+4  no yes
+5 yes yes
+6  no yes
+7  no  no
+8 yes yes
+9  no  no
+> print( cvamImpute( fit, data=crime, freq=n ) )
+   V1  V2 freq
+1  no  no  527
+2 yes  no  100
+3  no yes   76
+4 yes yes   53
+> 
+> # fit the non-independence model to the crime data
+> fitML <- cvam( ~ V1 * V2, data=crime, freq=n )
+> # display the ML estimate for beta and pi
+> print( get.coef( fitML ) )
+(Intercept)         V11         V21     V11:V21 
+  4.6241983   0.5002470   0.6600862   0.3177051 
+> print( get.fitted( fitML, type="prob" )$fit )
+[1] 0.69712335 0.13578303 0.09863044 0.06846318
+> # draw from the approximate posterior, display new beta and pi
+> set.seed(83425)
+> obj <- cvam(fitML, method="approxBayes")
+> print( get.coef( obj ) )
+(Intercept)         V11         V21     V11:V21 
+  4.6401653   0.6145345   0.6493728   0.2478188 
+> print( get.fitted( obj, type="prob" )$fit )
+[1] 0.70210490 0.12513288 0.11671087 0.05605134
+> 
+> obj <- cvam(fitML, method="approxBayes",
++    control=list(iterApproxBayes=5000, saveProbSeries=TRUE) )
+> # display the first few beta and pi vectors
+> print( head( get.coefSeries(obj) ) )
+     (Intercept)       V11       V21   V11:V21
+[1,]    4.621281 0.4904044 0.6591652 0.3329766
+[2,]    4.579132 0.5171364 0.6917306 0.3486476
+[3,]    4.593146 0.4306763 0.6814657 0.3789800
+[4,]    4.632846 0.5294656 0.6763896 0.3347828
+[5,]    4.570942 0.5765167 0.6637533 0.2605799
+[6,]    4.547775 0.4621952 0.6455106 0.4112865
+> print( head( get.probSeries(obj) ) )
+         no.no    yes.no     no.yes    yes.yes
+[1,] 0.6990577 0.1346894 0.09610582 0.07014708
+[2,] 0.7189250 0.1272545 0.08974754 0.06407299
+[3,] 0.7012110 0.1388642 0.08409251 0.07583234
+[4,] 0.7145115 0.1268623 0.09456186 0.06406439
+[5,] 0.6999839 0.1312185 0.11021036 0.05858726
+[6,] 0.7121421 0.1241281 0.08602891 0.07770083
+> 
+> pi.series <- get.probSeries(obj)
+> delta <- pi.series[,3] - pi.series[,2]
+> print( summary(delta) )
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+-0.12002 -0.05050 -0.03760 -0.03727 -0.02382  0.03553 
+> print( sum( delta > 0 ) )
+[1] 151
+> 
+> set.seed(4358)
+> fit <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC")
+> print( summary(fit) )
+~ V1 * V2
+
+Prior:
+      Flattening frequency = 0
+Total nuggets + flattening = 0
+              Ridge factor = 0
+          Intensity factor = 1
+
+Sample size:
+              total N in supplied data = 756
+N from supplied data used in model fit = 641
+           prior effective sample size =   0
+
+Degrees of freedom:
+    patterns of coarsened data = 9
+  cells in complete-data table = 4
+cells without latent variables = 4
+         structural zero cells = 0
+   parameters in Poisson model = 4
+                            df = 0
+
+Starting values:
+default, center
+jitter SD = 0.000000
+
+MCMC: Data augumentation (DA) with Metropolis-Hastings
+
+Tuning parameters:
+ proposal df = 10 
+   step size = 0.8
+scale factor = 0.8
+
+Accept rate = 0.7936
+
+              Iterations performed = 5000
+   Iterations discarded as burn-in =    0
+          Iterations after burn-in = 5000
+Thinning interval for saved series =    1
+           Samples in saved series = 5000
+               Imputation interval =    0
+      Number of imputations stored =    0
+
+Direct estimates and SE's from 5000 successive MCMC samples
+              coef      SE tstat pval
+(Intercept) 4.6104 0.05779 79.77    0
+V11         0.5015 0.06015  8.34    0
+V21         0.6657 0.06018 11.06    0
+V11:V21     0.3209 0.06277  5.11    0
+
+> 
+> betaSeries <- get.coefSeries( fit )
+> print( summary( betaSeries ) )
+
+Iterations = 1:5000
+Thinning interval = 1 
+Number of chains = 1 
+Sample size per chain = 5000 
+
+1. Empirical mean and standard deviation for each variable,
+   plus standard error of the mean:
+
+              Mean      SD  Naive SE Time-series SE
+(Intercept) 4.6104 0.05780 0.0008174       0.001691
+V11         0.5015 0.06016 0.0008507       0.001395
+V21         0.6657 0.06019 0.0008512       0.001413
+V11:V21     0.3209 0.06277 0.0008877       0.001531
+
+2. Quantiles for each variable:
+
+              2.5%    25%    50%    75%  97.5%
+(Intercept) 4.4974 4.5725 4.6105 4.6495 4.7202
+V11         0.3807 0.4624 0.5018 0.5397 0.6213
+V21         0.5516 0.6251 0.6645 0.7066 0.7865
+V11:V21     0.1982 0.2792 0.3208 0.3657 0.4396
+
+> 
+> print( get.fitted(fit, type="prob") )
+   V1  V2     freq        fit
+1  no  no 527.3670 0.69829289
+2 yes  no 102.4814 0.13547757
+3  no yes  74.4200 0.09780841
+4 yes yes  51.7316 0.06842113
+> 
+> set.seed(4358)
+> fit <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC",
++    control=list( saveProbSeries=TRUE ) )
+> piSeries <- get.probSeries(fit)
+> delta <- piSeries[,3] - piSeries[,2]
+> print( summary(delta) )
+
+Iterations = 1:5000
+Thinning interval = 1 
+Number of chains = 1 
+Sample size per chain = 5000 
+
+1. Empirical mean and standard deviation for each variable,
+   plus standard error of the mean:
+
+          Mean             SD       Naive SE Time-series SE 
+    -0.0376692      0.0197574      0.0002794      0.0004454 
+
+2. Quantiles for each variable:
+
+     2.5%       25%       50%       75%     97.5% 
+-0.077161 -0.050420 -0.038159 -0.024072  0.001025 
+
+> print( sum( delta > 0 ) )
+[1] 138
+> 
+> 
+> impList <- as.list(1:10) # a list to store the imputed datasets
+> set.seed(769090)         # for reproducibility
+> for(m in 1:10) {
++    # run MCMC under the non-independence model
++    tmp <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC")
++    # impute under the simulated parameters
++    impList[[m]] <- cvamImpute( tmp, crime, freq=n)
++ }
+> # display the first two imputations
+> print( impList[1:2] )
+[[1]]
+   V1  V2 freq
+1  no  no  530
+2 yes  no  100
+3  no yes   73
+4 yes yes   53
+
+[[2]]
+   V1  V2 freq
+1  no  no  534
+2 yes  no   99
+3  no yes   69
+4 yes yes   54
+
+> 
+> result <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC",
++    control=list( iterMCMC=5000, imputeEvery=500 ) )
+> print( get.imputedFreq(result) )
+   V1  V2 imp.1 imp.2 imp.3 imp.4 imp.5 imp.6 imp.7 imp.8 imp.9 imp.10
+1  no  no   528   527   541   523   529   522   530   515   531    528
+2 yes  no   102   104    90   105   103   110   103   109    96    104
+3  no yes    72    71    70    70    69    73    73    77    73     67
+4 yes yes    54    54    55    58    55    51    50    55    56     57
+> 
+> #  run EM, then create ten imputations with approxBayes
+> fitML <- cvam( ~ V1 * V2, data=crime, freq=n ) 
+> result <- cvam( fitML, method="approxBayes",
++    control=list( iterApproxBayes=10, imputeApproxBayes=TRUE ) )
+> print( get.imputedFreq(result) )
+   V1  V2 imp.1 imp.2 imp.3 imp.4 imp.5 imp.6 imp.7 imp.8 imp.9 imp.10
+1  no  no   522   522   529   534   528   528   529   525   530    530
+2 yes  no   105   112   107   101    93   101   104   104   104     99
+3  no yes    78    72    70    68    80    75    72    72    73     80
+4 yes yes    51    50    50    53    55    52    51    55    49     47
+> 
+> set.seed(54981)
+> result <- cvam( fitML, method="MCMC",
++    control=list( iterMCMC=5000, imputeEvery=500 ) )
+> impData <- get.imputedFreq(result)[-(1:2)] # just the frequencies 
+> est.list <- std.err.list <- as.list(1:10)  # to hold the estimates and SEs
+> for( m in 1:10 ) {
++    f <- impData[,m]
++    est.list[[m]] <- log( (f[1] * f[4]) / (f[2] * f[3]) )
++    std.err.list[[m]] <- sqrt( sum(1/f) )
++ }
+> print( miInference( est.list, std.err.list ) )
+        Est      SE Est/SE   df p Pct.mis
+[1,] 1.2773 0.26669  4.789 64.1 0    37.5
+> 
+> proc.time()
+   user  system elapsed 
+  1.062   0.069   1.102 

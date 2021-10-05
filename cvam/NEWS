@@ -1,0 +1,12 @@
+cvam News
+
+CHANGES IN version 0.9.0
+
+   * added Sweave vignette "Understanding Coarsened Factors in cvam"
+   * added Sweave vignette "Log-Linear Modeling with Missing and
+     Coarsened Values Using the cvam Package"
+
+CHANGES IN version 0.9.1
+
+   * fixed bug in cvamPredict when one variable is being predicted
+

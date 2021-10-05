@@ -1,0 +1,35 @@
+.PHONY : all
+
+all : myclean $(SHLIB)
+
+$(SHLIB) : cvam.o program_constants.o error_handler.o dynalloc.o quick_sort.o tabulate.o matrix_methods.o mathRC.o mathRF77.o math_R.o math_funcs.o cvam_engine.o
+
+program_constants.o : program_constants.f90
+
+error_handler.o : error_handler.f90 program_constants.o
+
+dynalloc.o : dynalloc.f90 program_constants.o error_handler.o
+
+quick_sort.o : quick_sort.f90 program_constants.o error_handler.o 
+
+tabulate.o : tabulate.f90 program_constants.o error_handler.o dynalloc.o
+
+matrix_methods.o : matrix_methods.f90 program_constants.o error_handler.o
+
+mathRC.o : mathRC.c
+
+mathRF77.o : mathRF77.f
+
+math_R.o : math_R.f90 error_handler.o program_constants.o mathRC.o mathRF77.o
+
+math_funcs.o : math_funcs.f90 error_handler.o program_constants.o math_R.o
+
+cvam_engine.o : cvam_engine.f90 error_handler.o program_constants.o dynalloc.o quick_sort.o tabulate.o matrix_methods.o math_R.o mathRC.o mathRF77.o math_funcs.o
+
+cvam.o : cvam.f90 cvam_engine.o error_handler.o program_constants.o dynalloc.o quick_sort.o tabulate.o matrix_methods.o math_R.o mathRC.o mathRF77.o math_funcs.o
+
+.PHONY : clean
+
+myclean : $(SHLIB)
+	rm -f *.mod *.o
+

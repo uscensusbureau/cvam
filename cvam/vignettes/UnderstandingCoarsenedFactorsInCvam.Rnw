@@ -1,0 +1,1358 @@
+%SweaveUTF8
+%\VignetteIndexEntry{Understanding Coarsened Factors in cvam}
+%\VignetteDepends{tools}
+%\VignetteDepends{datasets}
+%\VignetteDepends{stats}
+%\VignetteDepends{nnet}
+%\VignetteDepends{lme4}
+%\VignetteDepends{xtable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[12pt]{article}
+
+\usepackage{graphicx}
+\usepackage{charter}  % nicer font package
+\usepackage{booktabs}
+
+% set margins, etc
+\usepackage[text={6in,8.5in},footskip=.5in,centering,letterpaper]{geometry}
+\parskip = 6pt
+
+\usepackage{fancyhdr}
+% default page style
+\pagestyle{fancy}
+\fancyhead[L,C]{}
+\fancyhead[R]{\nouppercase{\textsc\leftmark}}
+\fancyfoot[R]{\thepage}
+%\fancyfoot[c]{\small\textsf{Draft -- Not Cleared for Public Release}}
+% plain page style for title page, front matter
+\fancypagestyle{plain}{%
+\fancyhf{} % clear all header and footer fields
+\fancyfoot[R]{\thepage}
+%\fancyfoot[c]{\small\textsf{Draft -- Not Cleared for Public Release}}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}}
+\addtolength{\headheight}{.1in}
+
+\usepackage{fancyvrb} % extended verbatim environments
+  \fvset{fontsize=\normalsize}% default font size for fancy-verbatim
+
+\usepackage{Sweave}
+\usepackage{amsmath}  % extended mathematics
+\usepackage{amssymb}  % extended mathematics
+
+% required for bibliography
+\usepackage{natbib}
+
+% custom math abbreviations for this document
+\newcommand{\I}{\mathrm{i}}
+\newcommand{\be}{\begin{equation}}
+\newcommand{\bea}{\begin{eqnarray}}
+\newcommand{\ee}{\end{equation}}
+\newcommand{\eea}{\end{eqnarray}}
+\newcommand{\nn}{\nonumber}
+\newcommand{\bX}{{\mbox{\boldmath $X$}}}
+\newcommand{\bx}{{\mbox{\boldmath $x$}}}
+\newcommand{\bY}{{\mbox{\boldmath $Y$}}}
+\newcommand{\by}{{\mbox{\boldmath $y$}}}
+\newcommand{\bZ}{{\mbox{\boldmath $Z$}}}
+\newcommand{\bz}{{\mbox{\boldmath $z$}}}
+\newcommand{\bT}{{\mbox{\boldmath $T$}}}
+\newcommand{\ba}{{\mbox{\boldmath $a$}}}
+\newcommand{\bb}{{\mbox{\boldmath $b$}}}
+\newcommand{\bA}{{\mbox{\boldmath $A$}}}
+\newcommand{\bB}{{\mbox{\boldmath $B$}}}
+\newcommand{\bC}{{\mbox{\boldmath $C$}}}
+\newcommand{\bc}{{\mbox{\boldmath $c$}}}
+\newcommand{\bD}{{\mbox{\boldmath $D$}}}
+\newcommand{\bH}{{\mbox{\boldmath $H$}}}
+\newcommand{\bG}{{\mbox{\boldmath $G$}}}
+\newcommand{\bL}{{\mbox{\boldmath $L$}}}
+\newcommand{\bM}{{\mbox{\boldmath $M$}}}
+\newcommand{\bN}{{\mbox{\boldmath $N$}}}
+\newcommand{\bI}{{\mbox{\boldmath $I$}}}
+\newcommand{\bP}{{\mbox{\boldmath $P$}}}
+\newcommand{\bQ}{{\mbox{\boldmath $Q$}}}
+\newcommand{\bR}{{\mbox{\boldmath $R$}}}
+\newcommand{\bS}{{\mbox{\boldmath $S$}}}
+\newcommand{\bU}{{\mbox{\boldmath $U$}}}
+\newcommand{\bu}{{\mbox{\boldmath $u$}}}
+\newcommand{\bV}{{\mbox{\boldmath $V$}}}
+\newcommand{\bv}{{\mbox{\boldmath $v$}}}
+\newcommand{\bW}{{\mbox{\boldmath $W$}}}
+\newcommand{\bK}{{\mbox{\boldmath $K$}}}
+\newcommand{\bp}{{\mbox{\boldmath $p$}}}
+\newcommand{\bn}{{\mbox{\boldmath $n$}}}
+\newcommand{\bzero}{{\mbox{\boldmath $0$}}}
+\newcommand{\bone}{{\mbox{\boldmath $1$}}}
+\newcommand{\bmu}{{\mbox{\boldmath $\mu$}}}
+\newcommand{\bnu}{{\mbox{\boldmath $\nu$}}}
+\newcommand{\bbeta}{{\mbox{\boldmath $\beta$}}}
+\newcommand{\Beta}{B}
+\newcommand{\balpha}{{\mbox{\boldmath $\alpha$}}}
+\newcommand{\bgamma}{{\mbox{\boldmath $\gamma$}}}
+\newcommand{\bdelta}{{\mbox{\boldmath $\delta$}}}
+\newcommand{\bepsilon}{{\mbox{\boldmath $\epsilon$}}}
+\newcommand{\blambda}{{\mbox{\boldmath $\lambda$}}}
+\newcommand{\bomega}{{\mbox{\boldmath $\omega$}}}
+\newcommand{\bfeta}{{\mbox{\boldmath $\eta$}}}
+\newcommand{\btheta}{{\mbox{\boldmath $\theta$}}}
+\newcommand{\bTheta}{{\mbox{\boldmath $\Theta$}}}
+\newcommand{\bphi}{{\mbox{\boldmath $\phi$}}}
+\newcommand{\bpsi}{{\mbox{\boldmath $\psi$}}}
+\newcommand{\bPsi}{{\mbox{\boldmath $\Psi$}}}
+\newcommand{\bxi}{{\mbox{\boldmath $\xi$}}}
+\newcommand{\bSigma}{{\mbox{\boldmath $\Sigma$}}}
+\newcommand{\bGamma}{{\mbox{\boldmath $\Gamma$}}}
+\newcommand{\bLambda}{{\mbox{\boldmath $\Lambda$}}}
+\newcommand{\bOmega}{{\mbox{\boldmath $\Omega$}}}
+\newcommand{\beff}{{\mbox{\boldmath $f$}}}
+% symbol for independence
+\newcommand\independent{\protect\mathpalette{\protect\independenT}{\perp}}
+\def\independenT#1#2{\mathrel{\rlap{$#1#2$}\mkern2mu{#1#2}}} 
+% absolute value and vector norm
+\newcommand{\abs}[1]{\lvert#1\rvert}
+\newcommand{\norm}[1]{\lVert#1\rVert}
+
+% new description environment for documenting arguments
+% to R functions 
+\newenvironment{mydescription}
+{   \let\olddescriptionlabel=\descriptionlabel
+   \renewcommand{\descriptionlabel}[1]{
+      \hspace{\labelsep}\hspace{1em}\texttt{##1}\,\upshape{:}} 
+   \begin{description} }
+{  \end{description} 
+   \let\descriptionlabel=\olddescriptionlabel }
+
+% Sweave options and changes to the way R code is displayed in code chunks
+\SweaveOpts{keep.source=TRUE}
+\fvset{listparameters={\setlength{\topsep}{0pt}}}
+\DefineVerbatimEnvironment{Sinput}{Verbatim}{
+  xleftmargin=2em,fontsize=\footnotesize,fontshape=sl}
+\DefineVerbatimEnvironment{Soutput}{Verbatim}{
+  xleftmargin=2em,fontsize=\scriptsize}
+\DefineVerbatimEnvironment{Scode}{Verbatim}{
+  xleftmargin=2em,fontsize=\footnotesize,fontshape=sl}
+\renewenvironment{Schunk}{\vspace{\topsep}}{\vspace{\topsep}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+% Sweave graphics hook
+<<echo=FALSE>>=
+oldSweaveHooks <- options()$SweaveHooks # resets to this at end of vignette
+options(SweaveHooks=list(fig=function()
+par(mar=c(5.1, 4.1, 1.1, 2.1))))
+@
+
+% set width of R output
+<<echo=FALSE>>=
+oldWidth <- options()$width  # resets to this at the end of vignette
+options(width=90)
+@
+
+\title{Understanding Coarsened Factors in \texttt{cvam}}
+\author{Joseph L. Schafer\thanks{Office of the Associate Director for
+    Research and Methodology, United States Census Bureau, Washington,
+    DC 20233, \texttt{joseph.l.schafer@census.gov}. This article is released to
+    inform interested parties of ongoing research and to encourage
+    discussion. The views expressed are those of the author and not
+    necessarily those of the U.S. Census Bureau.}}
+\date{\today}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+Coarsened data permits values that convey intermediate
+amounts of information between fully observed and fully missing (e.g.,
+values that are censored, truncated or top-coded). Categorical
+variables in R, known as factors, provide only one code for missing
+values, with no convenient way to express other coarsened
+states. The \texttt{cvam} package extends R's factor mechanism to
+allow categorical variables with arbitary types of
+coarsening. This document introduces the coarsened factor and describes
+functions in \texttt{cvam} for creating and manipulating
+them. The package's modeling procedures are described in a
+separate document \emph{Log-Linear Modeling with Missing and Coarsened
+Values Using the \texttt{cvam} Package}.    
+\end{abstract} 
+\newpage
+
+\thispagestyle{plain}
+
+\noindent{\em This work was produced at the U.S. Census Bureau in the
+  course of official duties and, pursuant to Title 17 Section 105 of
+  the United States Code, is not subject to copyright protection
+  within the United States.  Therefore, there is no copyright to
+  assign or license and this work may be used, reproduced or
+  distributed within the United States.  This work may be modified
+  provided that any derivative works bear notice that they are derived
+  from it, and any modified versions bear some notice that they have
+  been modified, as required by Title 17, Section 403 of the United
+  States Code.  The U.S. Census Bureau may assert copyright
+  internationally.  To this end, this work may be reproduced and
+  disseminated outside of the United States, provided that the work
+  distributed or published internationally provide the notice:
+  ``International copyright, 2016, U.S. Census Bureau,
+  U.S. Government''.  The author and the Census Bureau assume no
+  responsibility whatsoever for the use of this work by other parties,
+  and makes no guarantees, expressed or implied, about its quality,
+  reliability, or any other characteristic.  The author and the Census
+  Bureau are not obligated to assist users or to fix reported problems
+  with this work.  For additional information, refer to GNU General
+  Public License Version 3 (GPLv3).}
+\newpage
+
+
+\section{Review of categorical variables in R}
+
+\subsection{Factors and their uses}
+
+In the statistical programmming language R \citep{R}, a categorical
+variable is called a factor. For example, consider the
+\texttt{ChickWeight} dataset distributed with R as part of its
+\texttt{datasets} package. These data came from a
+randomized experiment concerning the effects of diet on the growth of newly
+hatched chicks. The variable \texttt{Diet} is a factor with four
+possible values (levels), which are unceremoniously labeled \texttt{"1"},
+\texttt{"2"}, \texttt{"3"},  and \texttt{"4"}.
+<<label="startup", echo=TRUE, fig=FALSE>>=
+library(datasets)       # attach the library, if needed
+data(ChickWeight)       # load dataset into R workspace
+ChickWeight[1:3,]       # look at first three rows
+str(ChickWeight$Diet)   # examine structure of the variable Diet
+@
+
+In exploratory data analyses, factors are used to define
+classification bins for 
+generating tables and plots. Examples using the \texttt{ChickWeight}
+data are shown below, and the resulting plot is shown in Figure
+\ref{fig:chickBoxPlots}.
+<<label="chickTable", echo=TRUE, fig=FALSE>>=
+# compute mean final weight at day 21 by Diet
+aggregate( weight ~ Diet, data = subset(ChickWeight, Time==21),
+    FUN = mean )
+# side-by-side boxplots of final weight at day 21 by Diet
+plot( weight ~ Diet, data = subset(ChickWeight, Time==21) )
+@
+\begin{figure}[t]
+\centering
+<<echo=FALSE, fig=TRUE>>=
+plot( weight ~ Diet, data = subset(ChickWeight, Time==21) )
+@ 
+\caption{\label{fig:chickBoxPlots}Boxplots of chick final weight,
+         classified by diet.}
+\end{figure}
+
+Factors are often used as predictors in regression models.
+When a $k$-level factor appears on the right-hand side
+of a model formula, R automatically expresses the factor as a set
+of $k-1$ variables to contrast the effects of the different levels
+\citep{chambers1992statistical}. In the example below, \texttt{Diet}
+is expressed as dummy indicators for levels \texttt{"2"},
+\texttt{"3"}, and \texttt{"4"}, so that 1 becomes the reference level. 
+<<label="regressFactorX", echo=TRUE>>=
+# regress final weight at day 21 on Diet
+result <- lm( weight ~ Diet, data = subset(ChickWeight, Time==21 ) )
+summary(result)$coef
+@
+
+A few R modeling functions will accept a factor on the left-hand side of a
+formula, treating the variable as the outcome in a multinomial
+regression. For example, the \texttt{multinom} function in the
+package \texttt{nnet} fits baseline-category logistic models
+\citep{venables2013modern}.
+<<label="regressFactorY", echo=TRUE>>=
+library(nnet)
+# regress Diet on initial weight to check for balance
+resultA <- multinom(Diet ~ weight,
+   data = subset(ChickWeight, Time==0 ), trace=FALSE )
+# compare fit to that of a null (intercept-only) model
+resultB <- multinom(Diet ~ 1,
+   data = subset(ChickWeight, Time==0 ), trace=FALSE )
+resultB$deviance - resultA$deviance  # df = 3
+@
+
+Factors may serve as identifiers for grouping observations
+in longitudinal and clustered analyses. In the example below, the
+\texttt{lmer} function from the package \texttt{lme4}
+\citep{bates2015fitting} is used to fit a 
+linear mixed-effects growth model with a random interecpt and slope
+for each chick.
+<<label="lme4", echo=TRUE>>=
+library(lme4)
+# Linear growth model with random intercepts and slopes
+result <- lmer( weight ~ Time + ( Time | Chick ),
+   data = ChickWeight )
+@
+
+Data stored as factors are often rearranged into other forms
+for summarizing and modeling, and many R functions are available for
+those manipulations. For example, consider the
+\texttt{HairEyeColor} dataset from the \texttt{datasets} package,
+which classifies 592 statistics 
+students by hair color, eye color and sex. The data are stored as a
+\texttt{table}, a three-dimensional array that records the
+number of students in each cell of the three-way classification.
+<<label="HairEyeColor", echo=TRUE>>=
+HairEyeColor
+@
+At an earlier stage, these data may have existed as a rectangular
+data frame with 592 rows (one per student) and factor variables
+named \texttt{Hair}, \texttt{Eye} and \texttt{Sex}. Those factor
+variables may have been processed into \texttt{HairEyeColor}'s
+present form by the function \texttt{table} or \texttt{xtabs}. 
+<<"HairEyeColorOrig", echo=FALSE>>=
+tmp <- as.data.frame( ftable( HairEyeColor, row.vars=1:3 ) )
+Hair <- rep( tmp$Hair, tmp$Freq )
+Eye <- rep( tmp$Eye, tmp$Freq )
+Sex <- rep( tmp$Sex, tmp$Freq )
+HairEyeColorOrig <- data.frame( Hair, Eye, Sex )
+tmp <- table(HairEyeColorOrig$Hair,
+  HairEyeColorOrig$Eye, HairEyeColorOrig$Sex )
+tmp <- xtabs( ~ Hair + Eye + Sex, data=HairEyeColorOrig )
+@
+
+\subsection{Creating a factor}
+
+The most common way to create a factor variable in R is by calling the
+function \texttt{factor}. The primary argument to this function is a
+vector of data, typically numeric or character. By default,
+\texttt{factor} will return a factor variable with one level for each
+distinct value found in the vector, and the levels will be arranged in
+ascending alphanumeric order.
+<<"CreateFactor", echo=TRUE>>=
+weather <- c("clear", "rain", "clear", "cloudy", "snow", "clear", "rain")
+weather <- factor(weather)
+table(weather)
+@
+Another commonly used function for
+creating a factor is \texttt{cut}, which bins numeric data into
+categories according to user-defined break points.
+<<"Cut", echo=TRUE>>=
+# generate 1,000 U(0,1) random variates, then 
+# classify them as low, medium, and high
+uniform <- runif(1000)
+lmh <- cut( uniform, breaks=c(0, .333, .667, 1),
+    labels=c("low", "medium", "high") )
+table(lmh)
+@
+
+
+\subsection{Factor levels}
+
+If \texttt{x} is a factor, then \texttt{nlevels(x)} returns its number
+of levels. Internally, the factor's data values are stored as positive
+integers 
+\texttt{1}, \texttt{2}, \ldots, \texttt{nlevels(x)}. For the most
+part, however, those
+integers are hidden from the user. Instead, the user typically sees
+character strings defined by the
+attribute \texttt{levels}, a character vector of length
+\texttt{nlevels(x)}. For example, let's look at \texttt{chickwts},
+another chick-related dataset from the \texttt{datasets} package. This
+data frame has a factor variable \texttt{feed} with six descriptively
+named levels. 
+<<"chickwtsA", echo=TRUE>>=
+str(chickwts)
+levels( chickwts$feed )
+@
+This variable's \texttt{storage.mode} is \texttt{"integer"}.
+<<"chickwtsA1", echo=TRUE>>=
+storage.mode( chickwts$feed )
+@
+However, it is the character strings in 
+\texttt{levels} that are seen 
+when the variable is displayed using the \texttt{print}
+function, and when it is tabulated using \texttt{table} or
+\texttt{xtabs}. 
+<<"chickwtsA2", echo=TRUE>>=
+chickwts$feed[1:5]   # implicitly calling print
+table(chickwts$feed)
+xtabs(~ feed, data=chickwts)
+@
+Moreover, the relational operators \texttt{==} and \texttt{!=} compare the
+strings, not the integers.
+<<"chickwtsA3", echo=TRUE>>=
+sum( chickwts$feed == "meatmeal" )
+chickwts$weight[ chickwts$feed == "horsebean" ]
+@
+If you want to work with a factor's integer codes rather than its
+character-string levels, wrap the factor with \texttt{unclass}. This
+function strips away the object's \texttt{class} attribute, so that R no longer
+calls any of the special methods for factors, but treats the variable
+as if it were a just a vector of integers.
+<<"chickwtsA3", echo=TRUE>>=
+unclass(chickwts$feed)
+@
+
+\subsection{Extracting and replacing portions of a factor}
+
+If you extract portions of a factor using the subsetting operator
+\texttt{[}, the result is another factor. By default, the new factor has
+the same \texttt{levels} as the original, even if some of those levels
+have no obervations in them.
+<<"chickwtsB", echo=TRUE>>=
+chickwts$feed[1:22]
+@
+Empty levels can be eliminated by the \texttt{droplevels} function,
+or by supplying the argument \texttt{drop=TRUE} when using
+\texttt{[}.
+<<"chickwtsC", echo=TRUE>>=
+droplevels( chickwts$feed[1:22] )
+chickwts$feed[1:22, drop=TRUE]   # does the same thing
+@
+
+The replacement version of \texttt{[} does not allow you to replace
+elements of a factor with values that are not already present among
+its levels. To do that, you would need to first modify the
+\texttt{levels} attribute.
+<<"chickwtsD", echo=TRUE, warning=FALSE, results=verbatim>>=
+chickwts$feed[2] <- "HotDogs"   # this produces a missing value
+chickwts$feed[1:5]
+levels(chickwts$feed) <- c( levels(chickwts$feed), "HotDogs" )
+chickwts$feed[ 2 ] <- "HotDogs"   # now it works
+chickwts$feed[1:5]
+@
+
+\subsection{Other factor attributes}
+
+To determine whether or not an object is a factor, R examines its
+\texttt{class} attribute. A factor's \texttt{class} is either
+\texttt{"factor"} or \texttt{c("ordered", "factor")}, depending on
+whether the variable is assumed to be nominal (whose categories have
+no intrinsic ordering) or ordinal (having categories that are
+ordered). An ordered factor may be created by the
+\texttt{ordered} function, or by calling \texttt{factor} or
+\texttt{cut} with the
+argument \texttt{ordered=TRUE}.
+
+Some modeling functions will handle ordered and unordered factors
+differently. If a $k$-level unordered factor appears on the
+right-hand side of a regression formula, then by default R will create
+a set of $k-1$ 
+dummy indicators that contrast levels 2, 3, \ldots, $k$ against level
+1. If the factor is ordered, then by default R will compute
+orthogonal contrasts for fitting a polynomial function of degree $k-1$. This
+behavior is controlled by the factor's attribute \texttt{contrasts},
+a $k \times (k-1)$ matrix that shows how the regressors are
+defined. 
+<<"chickwtsE", echo=TRUE>>=
+# For an unordered factor, default contrasts use dummy indicators
+contrasts(chickwts$feed)
+
+# For an ordered factor, the default is orthogonal polynomials;
+# in the example below, they are linear and quadratic 
+uniform <- runif(1000)
+lmh <- cut( uniform, breaks=c(0, .333, .667, 1),
+    labels=c("low", "medium", "high"), ordered=TRUE )
+contrasts(lmh)
+@
+Other types of contrasts are available; see \texttt{?contrasts} for details.
+
+\subsection{Missing values in factors}
+
+\subsubsection{The ordinary \texttt{NA}}
+
+A missing value in a factor variable is displayed as \texttt{NA} when
+the factor is summarized or printed. Depending on the context,
+however, the \texttt{NA} can mean two very different things, and it is
+crucial to understand the difference.
+
+In the ordinary situation, \texttt{NA} is not an element
+of \texttt{levels}. An \texttt{NA} in a factor means that the
+datum belongs to one of the levels, but we do not know which
+one. This type of missing value is stored as the R constant
+\texttt{NA\_integer\_} in the vector of integer codes, and its presence
+is detectable by the function \texttt{is.na}.
+<<"partyA", echo=TRUE>>=
+# create a factor with a missing value
+party <- factor( c("Dem", "Ind", "Rep", NA, "Rep", "Ind", "Dem") )
+# Note that NA is not one of the levels
+party
+# The missing value appears in the integer codes
+unclass(party)
+# is.na returns TRUE if the value is missing, FALSE otherwise
+is.na(party)
+@
+When \texttt{NA}s are represented in this fashion, most R functions
+understand them to be missing in the conventional sense, and the
+system handles them in ways that depend
+on the function being invoked.
+For example, with the \texttt{table} function, by default \texttt{NA}s
+will not be reported in the resulting frequency table; to see them,
+supply the argument \texttt{exclude=NULL}.
+<<"partyA1", echo=TRUE>>=
+table(party)
+table(party, exclude=NULL)
+@
+With the modeling functions \texttt{lm} and \texttt{glm}, if a factor
+with missing values appears in a regression formula, R may attempt to
+remove the incomplete cases from the analysis, or the model-fitting
+procedure may fail. Treatment of missing values in those functions is
+determined by function arguments or by the global option
+\texttt{na.action}; see \texttt{?options}.
+
+As already mentioned, the function \texttt{droplevels} will remove
+empty levels (i.e., levels with no obervations in
+them) from a factor. The optional argument \texttt{exclude} can be
+used to remove additional levels even if they are non-empty. Any observation 
+within an excluded level becomes a missing value.
+<<"partyA2", echo=TRUE>>=
+party <- droplevels(party, exclude=c("Ind",NA))
+party
+@
+Notice that \texttt{NA} was explicitly included among the values
+supplied to \texttt{exclude}. If it were not, then
+\texttt{droplevels} would have put \texttt{NA}s into a level, as we
+now describe. 
+
+\subsubsection{\texttt{NA} as a factor level}
+
+As an alternative to the usual way of handling missing values, we can
+instruct R to classify \texttt{NA}s into a level of their own.  This will
+happen if we call \texttt{factor} with \texttt{exclude=NULL},
+<<"NAlevelA", echo=TRUE>>=
+party <- factor( c("Dem", "Ind", "Rep", NA, "Rep", "Ind", "Dem"),
+   exclude=NULL)
+party
+@
+or if we pass a factor to the function \texttt{addNA}.
+<<"NAlevelB", echo=TRUE>>=
+party <- factor( c("Dem", "Ind", "Rep", NA, "Rep", "Ind", "Dem") )
+party
+party <- addNA(party)
+party
+@
+The inverse operation to \texttt{addNA} is \texttt{droplevels}
+with \texttt{exclude=NA}.
+<<"NAlevelC", echo=TRUE>>=
+party <- droplevels(party, exclude=NA)
+party
+@
+When \texttt{NA} is a factor level, the factor contains no missing
+values in the traditional sense. None of the integer codes are
+\texttt{NA\_integer\_}, and \texttt{is.na} always returns
+\texttt{FALSE}. 
+<<"NAlevelD", echo=TRUE>>=
+party <- addNA(party)
+unclass(party)
+is.na(party)
+@
+When a factor with \texttt{NA} as a level appears on the right-hand side
+of a model formula, the regression functions \texttt{lm} and
+\texttt{glm} will include the \texttt{NA} cases in the analysis, creating
+a dummy code or other contrast term to distinguish \texttt{NA} from
+the other levels. That approach may be sensible if
+the model is intended only for prediction, 
+but it often leads to unintended or undesirable
+consequences and should be used only with caution.
+
+\subsection{Manipulating factor levels\label{sec:manipLevels}}
+
+The replacement version of the function \texttt{levels}, known to R as
+\texttt{levels<-}, can be used to
+change a factor's \texttt{levels} attribute. Often it will not affect
+the underlying integer codes, 
+but sometimes it will. If \texttt{x} is a factor, then  replacing
+\texttt{levels(x)} with another character vector of the same length
+simply renames the categories without changing the integer codes.
+<<"manipLevelA", echo=TRUE>>=
+# draw 25 values of red, green, or blue with equal probabilities
+myFac <- cut( runif(25), breaks=c(0, .333, .667, 1),
+    labels=c("red", "green", "blue") )
+table(myFac)
+# change three colors to Three Stooges
+levels(myFac) <- c("Larry", "Curly", "Moe")
+table(myFac)
+@
+It does not matter if the replacement levels happen to be a
+permutation of the existing ones; the categories are merely renamed.
+<<"manipLevelB", echo=TRUE>>=
+# replace "Larry" with "Moe", "Curly with "Larry", "Moe" with "Curly"
+levels(myFac) <- c("Moe","Larry", "Curly")
+table(myFac)
+@
+Replacing \texttt{levels} by a longer vector will introduce empty levels.
+<<"manipLevelC", echo=TRUE>>=
+# add the mysterious fourth Stooge, creating an empty level
+levels(myFac) <- c("Moe","Larry", "Curly", "Shemp")
+table(myFac)
+@
+And replacing a single element of \texttt{levels} with another,
+existing level will change the integer codes, collapsing the two
+categories into one.
+<<"manipLevelD", echo=TRUE>>=
+# This will replace every occurrence of "Curly" with "Shemp"... 
+levels(myFac)[3] <- "Shemp"
+# ...causing "Curly" to be dropped from the levels
+table(myFac)
+@
+If we try to replace \texttt{levels} with a shorter vector,
+R will report an error, because it has not
+been told how the existing levels relate to the new ones. When reducing the
+number of levels, we can specify these relationships via a list. For
+example, suppose we have a factor with three levels, and we want to combine
+two levels into one, producing a new factor with two levels.
+<<"partyA", echo=TRUE>>=
+party <- factor( c("Dem", "Ind", "Rep", "Dem", "Rep", "Ind", "Dem") )
+table(party)
+
+# leave "Rep" alone, but combine "Dem" and "Ind" into "notRep"
+levels(party) <- list( Rep = "Rep", notRep = c("Dem", "Ind") ) 
+table(party)
+@
+The \texttt{names} of the provided list become the \texttt{levels} of
+the new factor.
+
+Other useful functions for manipulating factor levels include
+\texttt{relevel} and 
+\texttt{reorder}, which may change the integer codes; see
+\texttt{?relevel} 
+and \texttt{?reorder} for details.
+
+
+\section{Coarsened categorical variables}
+
+\subsection{What are coarsened data?}
+
+Coarsened data is a general term for quantities that may be
+fully observed, entirely missing, or somewhere in between. Instead of
+obtaining a random variable's realized value, we are told that the value
+lies in a subset of the random variable's support.
+
+Coarsened data are common in survival analysis. Suppose $V_i$ ia a
+continuously distributed positive outcome (e.g., survival time) for
+observational unit $i$. Ideally, the analyst is told the actual
+value $V_i=v_i$, in which case the datum is fully
+observed. In lieu of that, the analyst may be told
+\begin{itemize}
+\item $V_i\in (0, a_i)$ for some $a_i>0$, said to be \textit{left-censored};
+\item $V_i\in (b_i,\infty)$ for some $b_i>0$, said to be
+\textit{right-censored}; 
+\item $V_i\in (a_i,b_i)$ for $a_i < b_i$, said to be
+\textit{interval-censored}; or
+\item $V_i\in (0,\infty)$, which corresponds to a traditional missing
+value.
+\end{itemize}
+Procedures for survival analysis may accept any or all of these types,
+but special data structures might be needed.  A continuous variable
+with all these types of censoring cannot be stored as a 
+numeric vector with a single missing-value code. To analyze such data,
+we need to extend the usual objects to hold extra information.
+
+\subsection{Theory of coarsened data}
+
+A general paradigm for describing and analyzing coarsened
+data was developed by \cite{heitjan1991ignorability} and
+\cite{heitjan1994ignorability}. That framework built upon theory of
+missing data begun by \cite{rubin1976inference}, and key concepts from
+the literature on missing data extend to coarsened data in natural ways.
+
+In the missing-data literature, a \textit{missing-data mechanism} is a
+process that operates on a sample of complete data to determine which
+data values will be observed and which ones will be missing. If we
+assume that the probabilities of missingness do not depend on any
+missing quantities, the missing values are said to be \textit{missing
+at random} (MAR), and in those cases, explicit modeling of the
+missing-data mechanism is (usually) not necessary. With coarsened
+data, there is a \textit{coarsening mechanism}, a process that
+operates on the realized data to determine if and how they are being
+coarsened.  The analogue of MAR is \textit{coarsened at random} (CAR),
+which allows us to forego building a model for the coarsening
+mechanism. For extended discussion of these topics and more
+references, see \cite{little2002statistical}.
+
+Some areas of applied statistics have developed special
+terminology for coarsened data, but the concepts are
+similar to those in the general theory of
+\cite{heitjan1991ignorability} and \cite{heitjan1994ignorability}. A
+prime example is \textit{noninformative censoring} in survival
+analysis, which essentially means that the censored values are CAR.
+
+\subsection{Notation for coarsened categorical variables\label{sec:notation}}
+
+Imagine a dataset with $J$ categorical variables.  Let $V_{ij}$ denote
+the $j$th categorical variable for individual or observational unit
+$i$. Denote its set of possible values by
+\[
+\mathbb{V}_j \; = \;
+\{ 1, 2, \ldots, \#\mathbb{V}_j \}.
+\]
+(The symbol `$\#$' is the cardinality operator. When applied to a set,
+it returns the number of elements in the set. We use this
+symbol to avoid adding unnecessary letters to our notation.) The elements of
+$\mathbb{V}_j$ are called \textit{base-level codes}; these are all the
+possible responses that would be seen if there were no nonresponse or
+coarsening.
+
+Let $V^*_{ij}$ denote the observed, coarsened version of $V_{ij}$. The
+possible values of $V^*_{ij}$ lie in the expanded set
+\[
+\mathbb{V}^*_j \; = \;
+\{ 1, 2, \ldots, \#\mathbb{V}_j, 
+\ldots, \#\mathbb{V}^*_j \},
+\]
+where $\#\mathbb{V}^*_j > \#\mathbb{V}_j$.
+The extra codes not found in $\mathbb{V}_j$,
+\[
+\mathbb{V}^*_j \setminus \mathbb{V}_j \,=\, \{
+\#\mathbb{V}+1, \ldots, \#\mathbb{V}^*_j\},
+\]
+are called
+\textit{coarse-level codes}. 
+(The symbol `$\setminus$' is the set difference operator.)
+
+If $V^*_{ij}$ happens to be one of the base-level codes, then $V_{ij}$
+is fully known and is equal to $V^*_{ij}$,
+\begin{eqnarray}
+V^*_{ij} \,= \,1 & \Rightarrow & V_{ij} \,=\,1, \nn\\
+& \vdots & \nn\\
+V^*_{ij} \,= \#\mathbb{V}_j & \Rightarrow & V_{ij} \,=\,\#\mathbb{V}_j.
+\nn
+\end{eqnarray}
+However, if $V^*_{ij}$ happens to be one of the coarse-level codes,
+the exact value of $V_{ij}$ cannot be deduced from it. In that case,
+$V_{ij}$ is known to lie within a given subset of the base-level codes, a
+set denoted by ${\cal M}_j(V^*_{ij})$. That is,
+\[
+V^*_{ij} \, =\, v^* \; \Rightarrow \;
+V_{ij} \, \in \, {\cal M}_j(v^*),
+\]
+where ${\cal M}_j$ is the \textit{mapping}, a one-to-many relation
+that maps elements of $\mathbb{V}^*$ onto non-empty subsets of
+$\mathbb{V}_j$. 
+By convention, we will use the last coarse-level code
+to denote a traditional missing value,
+\[
+{\cal M}_j(v^*) \, = \,\mathbb{V}_j
+\;\;\mbox{when}\; v^*\,=\,\#\mathbb{V}^*_j.
+\]
+
+For example, suppose that $V_{ij}$ denotes a trichotomous political
+party affiliation
+with possible values $1$=Democrat, $2$=Republican, and $3$=Independent. 
+If individual $i$ provides her exact affiliation, then $V^*_{ij}$ will
+be $1$, $2$, or $3$, and $V^*_{ij}$ will coincide with $V_{ij}$. For those
+responses, the mappings are one-to-one,
+\begin{eqnarray}
+{\cal M}_j(1) & = & \{1\}, \nn\\
+{\cal M}_j(2) & = & \{2\}, \nn\\
+{\cal M}_j(3) & = & \{3\}. \nn
+\end{eqnarray}
+Now suppose she indicates that she is not a Democrat, but declines to
+say whether she is Republican or Independent. If we code that event as
+$V^*_{ij}=4$, then the mapping is
+\[
+{\cal M}_j(4) \, = \, \{2,3\}.
+\]
+Similarly, if she only indicates that she is not a Republican, and we
+code the event as $V^*_{ij}=5$, then
+\[
+{\cal M}_j(5) \, = \, \{1,3\}.
+\]
+If she indicates she is not an Independent, then $V^*_{ij}=6$, and
+\[
+{\cal M}_j(6) \, = \, \{1,2\}.
+\]
+Finally, if she declines to provide any information at all, then the
+coding is $V^*_{ij}=7$, and the mapping is
+\[
+{\cal M}_j(7) \, = \, \{1,2,3\} ,
+\]
+which corresponds to a traditional missing value.
+
+As the number of base-level codes increases, the number of possible
+coarse-level codes expands rapidly. If we were to include
+all possible coarsenings, $\#\mathbb{V}^*_j$ would be (two raised to
+the  power of $\#\mathbb{V}_j$, minus one). In practice, we do not need
+to create a coarse-level code for every possible subset of the base-level
+codes, but only for groupings that actually happen.
+Continuing the previous example, suppose that
+party affiliation is measured by two items on a questionnaire. The
+first item is, ``Do you consider yourself to be Independent?'' If the
+response is ``Yes,'' then the second item is skipped. If the response
+is ``No,'' then the participant is presented with the second item,
+``Do you consider yourself 
+to be Democrat or Republican?'' Nonresponse to the second item
+produces a coarsened value of \{Democrat, Republican\}, and nonresponse
+to both items gives \{Democrat, Republican, Independent\}, which is a
+traditional missing value. The
+combinations \{Democrat, Independent\} and \{Republican, Independent\} do not
+occur in this study and therefore do not need to be represented in
+$\mathbb{V}^*_j$. 
+
+\subsection{Where do coarsened categorical variables come from?}
+
+In a trivial sense, every dataset with missing values has
+coarsened data, because traditional missing values are a particular type of
+coarsening.  As shown by in the previous discussion, coarsened values
+can arise when variables are created from multiple items on a questionnaire,
+if participants respond to some questions but not others.
+Coarsening may also result from attempts to harmonize data from
+multiple sources, when those sources attempt to measure similar
+constructs but with different levels of granularity.
+
+Apart from certain areas of statistics (e.g., survival analysis),
+however, methods for coarsened variables are 
+not widely used, lending the impression that coarsened
+values ought to be eliminated by editing them out of a
+dataset or recoding them as missing. As techniques and software become
+available, coarsened values can be incorporated into analyses in  more
+principled manner, leading to more efficient results, because partial
+information is better than none.
+
+\section{Working with coarsened factors}
+
+\subsection{How to create a coarsened factor}
+
+In the \texttt{cvam} package, coarsened factors are created by the
+function \texttt{coarsened}. Let us begin with a trivial example.
+<<"coarsenedA", echo=TRUE>>=
+myFac <- factor( c("red", "green", NA, "yellow",
+   "notRed", "green", "notGreen") )
+table(myFac, exclude=NULL)
+@
+This factor, which R does not yet understand to be a coarsened factor,
+has five levels.
+<<"coarsenedB", echo=TRUE>>=
+levels(myFac)
+@
+Based on their names, it appears to us that 
+\begin{itemize}
+\item \texttt{"green"}, \texttt{"red"} and
+\texttt{"yellow"} are base levels,
+\item \texttt{"notGreen"} is a coarse level that maps to
+\texttt{c("red", "yellow")}, and
+\item \texttt{"notRed"} is a coarse level that maps to
+\texttt{c("green", "yellow")}.
+\end{itemize}
+Moreover, the missing value \texttt{NA} is a coarse level that maps to 
+\texttt{c("green", "red", "yellow")}.
+
+To turn this factor into a coarsened factor, we load the
+\texttt{cvam} package and call the \texttt{coarsened} function.
+<<"coarsenedB", echo=TRUE>>=
+library(cvam)
+myCoarsenedFac <- coarsened( myFac, levelsList = 
+   list( notGreen = c("red", "yellow"), notRed = c("green", "yellow") ) )
+@
+The result is a factor,
+<<"coarsenedC", echo=TRUE>>=
+is.factor(myCoarsenedFac)
+@
+with all the usual factor properties,
+<<"coarsenedD", echo=TRUE>>=
+storage.mode(myCoarsenedFac)
+nlevels(myCoarsenedFac)
+levels(myCoarsenedFac)
+@
+plus some new properties which are displayed by the \texttt{print}
+function.
+<<"coarsenedE", echo=TRUE>>=
+myCoarsenedFac
+@
+The \texttt{levelsList} argument that we supplied to
+\texttt{coarsened} instructed the function to
+\begin{itemize}
+\item interpret \texttt{"notGreen"} as a  combination of
+\texttt{"red"} and \texttt{"yellow"}, and 
+\item interpret \texttt{"notRed"} as a
+combination of \texttt{"green"} and \texttt{"yellow"}. 
+\end{itemize}
+Notice that we did not explicitly tell \texttt{coarsened}
+that \texttt{"green"}, \texttt{"red"} and
+\texttt{"yellow"} were base levels. The
+function discerned the base levels by looking at \texttt{levels(myFac)}
+and eliminating everything in \texttt{names(levelsList)}. Notice
+also that we did not explicitly say that \texttt{NA} was a combination
+of \texttt{"green"}, \texttt{"red"} and \texttt{"yellow"}. Once the
+function identified the base levels, it automatically interpreted
+\texttt{NA} as a combination of all of them.
+
+The \texttt{coarsened} function has only three arguments.
+\begin{verbatim}
+   coarsened(obj, levelsList = list(), warnIfCoarsened = TRUE)
+\end{verbatim}
+\begin{mydescription}
+\item[obj] a factor to be turned into a coarsened factor. This factor
+may have missing values, but it should not have \texttt{NA} as a level.
+\item[levelsList] a list that identifies each coarse level (except
+\texttt{NA})  and its mapping to the base levels. 
+\item[warnIfCoarsened] if \texttt{TRUE}, a warning will be provided
+if \texttt{obj} is already a coarsened factor
+\end{mydescription}
+The default value of \texttt{levelsList} is an
+empty list, which tells \texttt{coarsened} to treat  every level in
+\texttt{levels(obj)} as a base level, and to create \texttt{NA} as the
+only coarse level.
+
+\subsection{Attributes of a coarsened factor}
+
+The coarsened factor that we created has the following attributes.
+<<"coarsenedAttr", echo=TRUE>>=
+attributes( myCoarsenedFac )
+@
+\begin{itemize}
+\item The \texttt{class} of coarsened factor is either
+\texttt{c("coarsened", "factor")} or \texttt{c("coarsened", "ordered",
+"factor")}, depending on whether the main argument to
+\texttt{coarsened} was ordered.
+\item The \texttt{levels} attribute includes
+the base
+levels and the coarse levels. The base levels are listed first, and
+\texttt{NA} always comes last. 
+\item The
+\texttt{mapping} attribute is an integer matrix with elements
+\texttt{0} and \texttt{1}, showing the combination of base levels for
+each coarse level.
+\item The \texttt{contrasts} attribute is designed to facilitate
+log-linear modeling, as explained in the document
+\textit{Log-Linear Modeling with Missing and Coarsened Values Using the
+\texttt{cvam} Package}. It is not intended for use by functions outside
+of the \texttt{cvam} package, e.g., regression
+analyses with \texttt{lm} or \texttt{glm}. Using a coarsened factor on
+the right-hand side of a 
+model formula with those functions can produce nonsensical results.
+\end{itemize}
+Some attributes can be retrieved by functions of the same
+name. For example,
+<<"attrRetrieve", echo=TRUE>>=
+baseLevels( myCoarsenedFac )
+@
+is a convenient shorthand for \texttt{attr(myCoarsenedFac, "baseLevels")}. 
+
+Please note that, with very few exceptions, the attributes of a coarsened
+factor should only be set by the \texttt{coarsened} function and should
+not be directly changed by the user. 
+
+\subsection{Example: Race and Hispanic origin\label{sec:rh}}
+
+Over the last half century, it has become standard practice in the
+United States 
+for census and survey questionnaires to include separate items for
+race and Hispanic origin. In the year 2000, the General Social Survey
+(GSS) \citep{smith2019general} included an item based on the race
+question from the U.S. Census. Participants could choose from over a
+dozen race categories, or they could select ``Some other race'' and
+provide their own. This item was given to a random half-sample, so it
+is missing for about 50\% of participants. A separate question on
+Hispanic origin was 
+given to the full sample. 
+These two items are provided in the data frame \texttt{abortion2000}
+distributed with the \texttt{cvam} package.
+A cross-tabulation for these two items is
+shown below.
+<<"GSSA", echo=TRUE>>=
+str(abortion2000)
+CenRace <- abortion2000$CenRace
+Hisp <- abortion2000$Hisp
+table(CenRace, Hisp, exclude=NULL)
+@
+Notice that 41 persons (about 3\% of the half-sample) have a value of
+\texttt{"Hisp"} for \texttt{CenRace}. Hispanic ancestry is viewed
+by some to be both an ethnicity and a race. These persons selected ``Some
+other race'' and described themselves as Hispanic, Latina, 
+Latino, or something similar.
+
+Data analysts often combine race and Hispanic origin into a single
+variable. Consider a classification into four levels, 
+\begin{eqnarray}
+1 & = & \mbox{non-Hispanic White}, \nn\\
+2 & = & \mbox{non-Hispanic Black}, \nn\\
+3 & = & \mbox{non-Hispanic Other}, \nn\\
+4 & = & \mbox{Hispanic}. \nn
+\end{eqnarray}
+In R, the colon operator `\texttt{:}' combines two factors
+into a single factor with a level for every possible combination of the
+operands' levels. Observe what happens if we apply this operator to
+\texttt{CenRace} and \texttt{Hisp}, both of which have 
+missing values.
+<<"GSSB", echo=TRUE>>=
+RH <- Hisp:CenRace
+table(RH, exclude=NULL)
+@
+Every case with a missing value for either of the two variables
+received a missing value in the result, and a large amount of useful
+information has been needlessly discarded. Notice that 99 
+missing values 
+came from Hispanic persons with missing race; we may assume
+that they are Hispanic and manually assign them to level 4. But 1,320
+missing 
+values came from 
+non-Hispanic persons with missing race; these are more
+problematic, because each of them could belong to any of the levels 1,
+2, or 3. An ordinary factor in R cannot handle that partial
+information, but a coarsened factor can.
+
+To create our coarsened factor, we first apply \texttt{addNA} to each
+factor, combine them with `\texttt{:}', and drop the empty levels.
+<<"GSSC", echo=TRUE>>=
+CenRace <- addNA(CenRace)
+Hisp <- addNA(Hisp)
+RH <- Hisp:CenRace
+table(RH)
+RH <- droplevels(RH)
+table(RH)
+@
+In this example, there happen to be no observations with missing 
+values for both \texttt{CenRace} and \texttt{Hisp}. If there were, they
+would belong to a level named \texttt{"NA:NA"}, and at this point we
+would want to set them to \texttt{NA} and drop the empty
+\texttt{"NA:NA"} level, like this:
+<<"GSSCa", echo=TRUE>>=
+RH[ RH == "NA:NA" ] <- NA
+RH <- droplevels(RH)
+@
+
+Before applying the \texttt{coarsened} function, 
+we reorder and combine levels using the \texttt{levels<-} function
+with a list, as described in Section \ref{sec:manipLevels}.
+<<"GSSD", echo=TRUE>>=
+levels(RH) <- list(
+   nonHispWhite = "nonHisp:White",
+   nonHispBlack = "nonHisp:Black",
+   nonHispOther = "nonHisp:Other",
+   Hisp = c("Hisp:White", "Hisp:Black", "Hisp:Hisp", "Hisp:Other", "Hisp:NA"),
+   nonHispNA = "nonHisp:NA",
+   NAWhite = "NA:White" )
+table(RH)
+@
+The factor now has six levels. The first four will become base levels, and
+the last two will become coarse levels. We are ready to create the
+coarsened factor.
+<<"GSSE", echo=TRUE>>=
+RH  <- coarsened( RH, levelsList = list(
+   nonHispNA = c("nonHispWhite", "nonHispBlack", "nonHispOther"), 
+   NAWhite = c("nonHispWhite", "Hisp" ) ) )
+table(RH)
+@
+It's a good idea to examine the \texttt{mapping} matrix to make sure
+everything looks correct.
+<<"GSSF", echo=TRUE>>=
+mapping(RH)
+@
+Notice that \texttt{coarsened} automatically added an extra coarse
+level called \texttt{NA}, which in this example happens to be empty. 
+
+Because \texttt{RH} has the same length as the other variables in
+\texttt{abortion2000}, it may be put into the data frame.
+<<"GSSHa", echo=TRUE>>=
+abortion2000 <- data.frame(abortion2000, RH)
+abortion2000$RH <- RH    # does the same thing
+@
+When a coarsened factor is put into a data frame, all of its
+attributes are preserved.
+<<"GSSHb", echo=TRUE>>=
+identical( attributes(abortion2000$RH), attributes(RH) )
+@
+These attributes are needed by \texttt{cvam}'s modeling
+functions, which are described in the companion document
+\textit{Log-Linear Modeling with Missing and Coarsened Values Using
+the \texttt{cvam} Package}.
+
+\subsection{Tabulating coarsened factors}
+
+Because a coarsened factor inherits from class \texttt{"factor"},
+it can be passed to any R function that accepts
+factors. If that function is not part of the \texttt{cvam} package,
+it will treat coarse levels no differently from base levels. For
+example, the \texttt{table} function, which is called by
+\texttt{summary}, displays frequencies for all base levels and all
+coarse levels, including \texttt{NA}.
+<<"GSSG", echo=TRUE>>=
+summary(RH)    # essentially the same as table(RH)
+@
+When applied to ordinary factors, however, the 
+\texttt{table} function omits ordinary
+\texttt{NA}s by default. So if a coarsened and ordinary factor
+are cross-tabulated, the default behavior is to treat
+\texttt{NA} as a level for the coarsened factor but omit \texttt{NA}s
+from the ordinary factor.
+<<"GSSH", echo=TRUE>>=
+#  from abortion2000, a three-level factor
+PolViews <- abortion2000$PolViews
+# there are some missing values
+table( is.na(PolViews) )
+# but the NAs don't show up in a table
+table(RH, PolViews)
+@
+To display \texttt{NA}s for the ordinary factor, you can
+\begin{itemize}
+\item call \texttt{table} with the argument \texttt{exclude=NULL},
+\item explicitly turn \texttt{NA} into a level of the ordinary factor
+by calling \texttt{addNA}, or
+\item turn the ordinary factor into a coarsened factor, which does
+essentially the same thing as \texttt{addNA}.
+\end{itemize}
+<<"GSSI", echo=TRUE>>=
+table(RH, PolViews, exclude=NULL)
+table(RH, PolViews = addNA(PolViews) )
+table(RH, PolViews = coarsened(PolViews) )
+@
+The \texttt{xtabs} function is similar to \texttt{table}, but
+the variables to be tabulated are specified in a formula. To instruct
+\texttt{xtabs} to display
+\texttt{NA}s in an ordinary factor, use the argument
+\texttt{addNA=TRUE},
+<<"GSSJ", echo=TRUE>>=
+xtabs( ~ RH + PolViews, addNA=TRUE)
+@
+or wrap the ordinary factor with \texttt{addNA} or \texttt{coarsened}.
+Coarse levels are also displayed in flat tables, which are
+two-dimensional displays of multiway frequency tables created by the function
+\texttt{ftable}. To display \texttt{NA}s in an ordinary factor, wrap the
+factor with \texttt{addNA} and call
+\texttt{ftable} with \texttt{exclude=NULL}.
+<<"GSSJa", echo=TRUE>>=
+# display a flat version of a three-way table, with Sex:RH as
+# the row and PolViews as the column, showing the NAs in PolViews
+Sex <- abortion2000$Sex
+ftable( addNA(PolViews) ~ Sex + RH, exclude=NULL )
+@
+
+To tabulate a coarsened factor without displaying its coarse levels, use
+the \texttt{cvam} function \texttt{dropCoarseLevels}. This function
+removes the coarse levels from a coarsened factor, sets the coarsened
+values to \texttt{NA}, and returns an ordinary factor as its result.
+<<"GSSK", echo=TRUE>>=
+table( RH=dropCoarseLevels(RH), PolViews)
+@
+If the only coarse level is \texttt{NA}, then no information is lost
+when \texttt{dropCoarseLevels} is applied. If other non-empty coarse
+levels are present, however, the partial information carried by those
+observations is effectively discarded.
+
+\subsection{Creating coarsened factors from tabulated or grouped data}
+
+In Section \ref{sec:rh}, we created \texttt{RH} from a data frame with
+one row per individual in the survey. Datasets with rows for
+individual units are called microdata.  For the most part, any
+procedure for creating coarsened factors from microdata can also be
+applied to tabulated or grouped data, if those data exist in a data
+frame.
+
+To illustrate, let's create a grouped dataset
+from the demographic variables \texttt{Age}, \texttt{Sex}, \texttt{CenRace}, 
+and \texttt{Hisp}.  
+<<"groupedDataA", echo=TRUE>>=
+groupedData = as.data.frame( xtabs( ~ Age + Sex + CenRace + Hisp,
+   data=abortion2000, addNA=TRUE) )
+dim(groupedData)
+head(groupedData)
+# eliminate rows with Freq == 0
+groupedData <- subset( groupedData, Freq > 0 )
+dim(groupedData)
+@
+The \texttt{xtabs} function created a four-dimensional array of
+frequencies, and the option \texttt{addNA=TRUE} ensured that missing
+values in the factors were retained. The number of cells in that
+four-dimensional array is $5\times 2 \times 5 \times 3 = 150$.
+ Wrapping \texttt{xtabs} with
+\texttt{as.data.frame} reshaped the array into a data frame
+with 150 rows and five variables: one factor for each of the four
+dimensions, plus an 
+integer-valued variable 
+\texttt{Freq} containing the cell counts. Many cells in the
+four-dimensional table were empty, and removing rows of the data frame
+with frequencies 
+of zero reduced its size to 69 by 5.
+
+From this grouped dataset, we may now form the coarsened factor
+\texttt{RH} using exactly the same procedure that we used with
+microdata.
+<<"groupedDataB", echo=TRUE>>=
+CenRace <- addNA(groupedData$CenRace)
+Hisp <- addNA(groupedData$Hisp)
+RH <- Hisp:CenRace
+RH <- droplevels(RH)
+levels(RH) <- list(
+   nonHispWhite = "nonHisp:White",
+   nonHispBlack = "nonHisp:Black",
+   nonHispOther = "nonHisp:Other",
+   Hisp = c("Hisp:White", "Hisp:Black", "Hisp:Hisp", "Hisp:Other", "Hisp:NA"),
+   nonHispNA = "nonHisp:NA",
+   NAWhite = "NA:White" )
+RH  <- coarsened( RH, levelsList = list(
+   nonHispNA = c("nonHispWhite", "nonHispBlack", "nonHispOther"), 
+   NAWhite = c("nonHispWhite", "Hisp" ) ) )
+# copy the coarsened factor into the grouped data frame
+groupedData$RH <- RH
+@
+To produce a one-way classification by \texttt{RH} from this grouped
+dataset, we sum the variable \texttt{Freq} 
+within levels of \texttt{RH} using 
+\texttt{aggregate}.  
+<<"groupedDataC", echo=TRUE>>=
+aggregate( Freq ~ RH, FUN=sum, data=groupedData)
+@
+
+\subsection{Retaining coarsened factor attributes}
+
+Standard R functions for manipulating and reshaping data were
+not designed for coarsened factors. The \texttt{cvam} package provides
+versions of the extraction functions \texttt{[} and
+\texttt{[[}, and versions 
+of the replacement functions \texttt{[<-} and
+\texttt{[[<-}, to preserve the special attributes of
+coarsened factors through subsetting and replacement.
+For example, consider what happens when we extract rows from a
+data frame using \texttt{[} or \texttt{subset}.
+<<"attributesA", echo=TRUE>>=
+# list the attributes of our coarsened factor RH
+names( attributes( abortion2000$RH ) )
+# extract females using `[` and list the attributes
+femOnly <- abortion2000[ abortion2000$Sex == "Female", ]
+names( attributes( femOnly$RH ) )
+# do the same thing with subset
+femOnly <- subset( abortion2000, Sex == "Female" )
+names( attributes( femOnly$RH ) )
+@
+
+Unfortunately, when coarsened factors are subjected to other
+manipulations, their special attributes are sometimes lost.
+For example, none of 
+the special attributes 
+persist through
+an application of \texttt{xtabs} and \texttt{as.data.frame}:
+<<"attributesD", echo=TRUE>>=
+newGrouped <- as.data.frame( xtabs( ~ Age + Sex + RH, data=abortion2000,
+   addNA = TRUE ) )
+newGrouped <- subset( newGrouped, Freq > 0 )
+names( attributes( newGrouped$RH ) )
+@
+In this case, the attributes can be restored manually:
+<<"attributesE", echo=TRUE>>=
+attributes( newGrouped$RH ) <- attributes( abortion2000$RH )
+@
+An experimental R package named \texttt{sticky}
+\citep{brown2017sticky} was created for this purpose. If we apply
+the \texttt{sticky} function to a coarsened factor, its \texttt{class}
+is modified to \texttt{c("sticky", "coarsened", "factor")}, and the
+\texttt{sticky} package works silently behind the scenes to help
+retain the extra attributes.  This package does not solve every
+problem, however, and in certain cases you may still need to restore
+the attributes yourself.
+
+\section{Looking ahead}
+
+At this point, we have introduced coarsened factors and explained how
+to create and manipulate them, but readers may still be wondering why
+anyone should bother with these new objects. Handling \texttt{NA}s is
+difficult enough, and coarsened values are yet another inconvenience
+that analysts would rather avoid. In typical applications, the base
+levels of variables are important, and observations at the coarse
+levels are worth paying attention to only if they improve our
+understanding
+what is happening at the base levels. That is precisely why
+\texttt{cvam} was created. This package allows us to fit models that
+describe the base levels using the information in coarsened values.
+
+Returning to the notation of Section \ref{sec:notation}, our goal is to
+describe the categorical variables $(V_{i1},\ldots,V_{iJ})$ and the 
+relationships among them, but the available data are coarsened
+versions $(V^*_{i1}, \ldots, V^*_{iJ})$. The \texttt{cvam} package allows
+a user to model the joint distribution of $(V_{i1}, \ldots, V_{iJ})$
+from observations of $(V^*_{i1}, \ldots, V^*_{iJ})$.  To compute
+proper answers, special procedures are needed; we cannot simply
+discard the coarsened values, even in the univariate ($J=1$)
+case. The modeling functions in \texttt{cvam} provides those answers 
+an efficient and hassle-free manner.
+
+To see why this matters, suppose we try to estimate proportions within the
+categories of race and Hispanic origin defined in Section \ref{sec:rh},
+\begin{eqnarray}
+1 & = & \mbox{non-Hispanic White}, \nn\\
+2 & = & \mbox{non-Hispanic Black}, \nn\\
+3 & = & \mbox{non-Hispanic Other}, \nn\\
+4 & = & \mbox{Hispanic}, \nn
+\end{eqnarray}
+from the frequencies in our coarsened factor \texttt{RH}.
+Dropping the coarsened values, we obtain these sample proportions.
+<<"estimaterhB", echo=TRUE>>=
+dropRH <- dropCoarseLevels( abortion2000$RH )
+round( table(dropRH) / sum( table(dropRH) ), 4 )
+@
+However, the maximum-likelihood (ML) estimates based on the full data are
+starkly different:
+<<"estimaterhC", echo=FALSE>>=
+# quickly written function that accepts a single coarsened factor,
+# optionally with frequencies, and computes ML estimates for the
+# base-level probabilities. This function is used for unit testing.
+quickEM <- function( obj, freq = rep(1, length(obj)),
+   maxits=1000, eps=1e-06 ){
+   # identify the name of the coarsened factor
+   mc <- match.call()
+   objName <- as.character( mc[[2]] )
+   if( objName == "freq" ) stop( gettext(
+      "Main argument cannot be named 'freq'"), domain = NA )
+   # check args
+   stopifnot( inherits(obj, "coarsened") )
+   stopifnot( length(freq)==length(obj) )
+   stopifnot( all( !is.na(freq) ) )
+   stopifnot( all(freq>=0) )
+   stopifnot( maxits > 0 )
+   # aggregate the data to create model frame, then 
+   # pull out the coarsened factor and frequencies
+#   obj <- sticky::sticky(obj)
+   mf <- aggregate( freq ~ obj, FUN=sum )
+   names(mf)[ names(mf)=="obj" ] <- objName
+   cFac <- mf[[objName]]
+   freq <- mf[["freq"]]
+   # starting value: uniform probabilities
+   theta <- rep( 1 / nBaseLevels(cFac), nBaseLevels(cFac) )
+   names(theta) <- baseLevels(cFac)
+   # prepare for iteration
+   Ex <- theta.new <- theta
+   iter <- 0
+   converged <- FALSE
+   llvec <- numeric(maxits)
+   llvec[] <- NA
+   while( ( ! converged ) & ( iter < maxits ) ) {
+      iter <- iter + 1
+      theta <- theta.new
+      Ex[] <- loglik <- 0
+      # e-step
+      for( i in seq_along(cFac) ){
+         iC <- as.integer( cFac[i] )
+         if( iC %in% attr(cFac,"baseLevelCodes") ) {
+            Ex[iC] <- Ex[iC] + freq[i]
+            loglik <- loglik + freq[i] * log( theta[iC] )
+         } else {
+            w <- match(iC, attr(cFac, "coarseLevelCodes") )
+            w <- ( mapping(cFac)[w,] == 1 )
+            Ex[w] <- Ex[w] + freq[i] * theta[w] / sum( theta[w] )
+            loglik <- loglik + freq[i] * log( sum(theta[w]) )
+         }
+      }
+      llvec[iter] <- loglik
+      # m-step
+      theta.new <- Ex / sum(Ex)
+      # convergence check
+      converged <- all( abs(theta.new-theta) <= eps*abs(theta) )      
+   }
+   list( theta=theta, iter=iter, converged=converged, 
+      llvec=llvec[1:iter], loglik=loglik )
+}
+RH <- abortion2000$RH
+result <- quickEM(RH, eps=1e-08)
+@
+<<"estimaterhD", echo=FALSE>>=
+round( result$theta, 4)
+@
+Using ML reduces the 
+estimated proportion of Hispanics by nearly one half. We explain how to
+obtain these results in the companion vignette \emph{Log-Linear
+Modeling with Missing and Coarsened Values Using the \texttt{cvam}
+Package}.
+
+\bibliographystyle{apa}
+\bibliography{cvamBibliography}
+
+<<echo=FALSE>>=
+options(SweaveHooks=oldSweaveHooks)
+options(width=oldWidth)
+@
+
+\end{document}

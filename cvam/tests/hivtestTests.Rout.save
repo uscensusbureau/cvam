@@ -1,0 +1,367 @@
+
+R version 3.5.2 (2018-12-20) -- "Eggshell Igloo"
+Copyright (C) 2018 The R Foundation for Statistical Computing
+Platform: x86_64-redhat-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> library(cvam)
+> hivtest$L <- latentFactor( NROW(hivtest), 2 )
+> set.seed(125)
+> fit <- cvam( ~ L*A + L*B + L*C + L*D, data=hivtest, freq=COUNT,
++    control = list( startValJitter=.1 ) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( summary(fit) )
+~ L * A + L * B + L * C + L * D
+
+Prior:
+      Flattening frequency = 0
+Total nuggets + flattening = 0
+              Ridge factor = 0
+          Intensity factor = 1
+
+Sample size:
+              total N in supplied data = 428
+N from supplied data used in model fit = 428
+           prior effective sample size =   0
+
+Degrees of freedom:
+    patterns of coarsened data =  9
+  cells in complete-data table = 32
+cells without latent variables = 16
+         structural zero cells =  0
+   parameters in Poisson model = 10
+                            df =  6
+
+Starting values:
+default, center
+jitter SD = 0.100000
+
+EM algorithm:
+Converged at iteration 19
+Gradient length = 0.000003
+
+  Final logP = 1535.422
+Final loglik = 1535.422
+
+Estimates from EM, with Hessian-based SEs
+                coef       SE tstat   pval
+(Intercept) -12.7888 596.9637 -0.02 0.9829
+L1           -3.4995 596.9637 -0.01 0.9953
+A1           -4.0926 343.4382 -0.01 0.9905
+B1            0.7533   0.1018  7.40 0.0000
+C1            4.3186 325.4746  0.01 0.9894
+D1           -4.3086 363.9810 -0.01 0.9906
+L1:A1        -5.8350 343.4382 -0.02 0.9864
+L1:B1        -0.8964   0.1019 -8.80 0.0000
+L1:C1        -5.4931 325.4746 -0.02 0.9865
+L1:D1        -5.5261 363.9810 -0.02 0.9879
+
+> 
+> print( cvamEstimate( list( ~L, ~A|L, ~B|L, ~C|L, ~D|L ), fit ) )
+Estimates and SE's from EM, linearized
+~ L
+  L   prob     SE prob.lower prob.upper
+1 1 0.5401 0.0242     0.4924     0.5870
+2 2 0.4599 0.0242     0.4130     0.5076
+~ A | L
+  L   A   prob     SE prob.lower prob.upper
+1 1 neg 0.0000 0.0000     0.0000     1.0000
+2 1 pos 1.0000 0.0000     0.0000     1.0000
+3 2 neg 0.9703 0.0131     0.9304     0.9876
+4 2 pos 0.0297 0.0131     0.0124     0.0696
+~ B | L
+  L   B   prob     SE prob.lower prob.upper
+1 1 neg 0.4290 0.0327     0.3665     0.4938
+2 1 pos 0.5710 0.0327     0.5062     0.6335
+3 2 neg 0.9644 0.0132     0.9272     0.9829
+4 2 pos 0.0356 0.0132     0.0171     0.0728
+~ C | L
+  L   C   prob    SE prob.lower prob.upper
+1 1 neg 0.0871 0.019     0.0564     0.1323
+2 1 pos 0.9129 0.019     0.8677     0.9436
+3 2 neg 1.0000 0.000     0.0000     1.0000
+4 2 pos 0.0000 0.000     0.0000     1.0000
+~ D | L
+  L   D   prob   SE prob.lower prob.upper
+1 1 neg 0.0000 0.00     0.0000     1.0000
+2 1 pos 1.0000 0.00     0.0000     1.0000
+3 2 neg 0.9195 0.02     0.8706     0.9509
+4 2 pos 0.0805 0.02     0.0491     0.1294
+> 
+> # perform the lack-of-fit test
+> fitSat <- cvam( ~ A*B*C*D, data=hivtest, freq=COUNT )
+> print( anova( fit, fitSat, pval=TRUE ) )
+Model 1: ~ L * A + L * B + L * C + L * D
+Model 2: ~ A * B * C * D
+  resid.df -2*loglik df change   pval
+1        6   -3070.8                 
+2        0   -3087.1  6 16.227 0.0126
+> 
+> satFrame <- get.fitted( fitSat, type="mean" )
+> # get rid of the fitted values, because they are redundant
+> satFrame$fit <- NULL
+> LCFrame <-  get.fitted( fit, type="mean" )
+> muHatTable <- xtabs( fit ~ A + B + C + D, data=LCFrame )
+> muHatFrame <- as.data.frame( muHatTable, responseName = "muHat" )
+> muHat <- muHatFrame$muHat
+> quasiPearson <- ( satFrame$freq - muHat ) / sqrt( muHat )
+> satFrame$muHat <- round( muHat, 3 )
+> satFrame$quasiPearson <- round( quasiPearson, 2 )
+> print( satFrame )
+     A   B   C   D freq   muHat quasiPearson
+1  neg neg neg neg  170 169.366         0.05
+2  pos neg neg neg    4   5.193        -0.52
+3  neg pos neg neg    6   6.250        -0.10
+4  pos pos neg neg    1   0.192         1.85
+5  neg neg pos neg    0   0.000         0.00
+6  pos neg pos neg    0   0.000         0.00
+7  neg pos pos neg    0   0.000         0.00
+8  pos pos pos neg    0   0.000         0.00
+9  neg neg neg pos   15  14.837         0.04
+10 pos neg neg pos   17   9.096         2.62
+11 neg pos neg pos    0   0.548        -0.74
+12 pos pos neg pos    4  11.520        -2.22
+13 neg neg pos pos    0   0.000         0.00
+14 pos neg pos pos   83  90.509        -0.79
+15 neg pos pos pos    0   0.000         0.00
+16 pos pos pos pos  128 120.491         0.68
+> 
+> set.seed(85657)
+> fitLAB <- cvam( ~ L*A + L*B + L*C + L*D + L*A*B, 
++    data=hivtest, freq=COUNT,
++    control = list(startValJitter=.1) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( anova(fit, fitLAB, fitSat, pval=TRUE) )
+Model 1: ~ L * A + L * B + L * C + L * D
+Model 2: ~ L * A + L * B + L * C + L * D + L * A * B
+Model 3: ~ A * B * C * D
+  resid.df -2*loglik df  change   pval
+1        6   -3070.8                  
+2        4   -3072.7  2  1.8402 0.3985
+3        0   -3087.1  4 14.3871 0.0062
+> fitLAC <- cvam( ~ L*A + L*B + L*C + L*D + L*A*C, 
++    data=hivtest, freq=COUNT,
++    control = list(startValJitter=.1) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( anova(fit, fitLAC, fitSat, pval=TRUE) )
+Model 1: ~ L * A + L * B + L * C + L * D
+Model 2: ~ L * A + L * B + L * C + L * D + L * A * C
+Model 3: ~ A * B * C * D
+  resid.df -2*loglik df change   pval
+1        6   -3070.8                 
+2        4   -3070.8  2  0.000 1.0000
+3        0   -3087.1  4 16.227 0.0027
+> fitLAD <- cvam( ~ L*A + L*B + L*C + L*D + L*A*D, 
++    data=hivtest, freq=COUNT,
++    control = list(startValJitter=.1) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( anova(fit, fitLAD, fitSat, pval=TRUE) )
+Model 1: ~ L * A + L * B + L * C + L * D
+Model 2: ~ L * A + L * B + L * C + L * D + L * A * D
+Model 3: ~ A * B * C * D
+  resid.df -2*loglik df change   pval
+1        6   -3070.8                 
+2        4   -3084.0  2 13.171 0.0014
+3        0   -3087.1  4  3.056 0.5485
+> fitLBC <- cvam( ~ L*A + L*B + L*C + L*D + L*B*C, 
++    data=hivtest, freq=COUNT,
++    control = list(startValJitter=.1) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( anova(fit, fitLBC, fitSat, pval=TRUE) )
+Model 1: ~ L * A + L * B + L * C + L * D
+Model 2: ~ L * A + L * B + L * C + L * D + L * B * C
+Model 3: ~ A * B * C * D
+  resid.df -2*loglik df change   pval
+1        6   -3070.8                 
+2        4   -3084.0  2 13.171 0.0014
+3        0   -3087.1  4  3.056 0.5485
+> fitLBD <- cvam( ~ L*A + L*B + L*C + L*D + L*B*D, 
++    data=hivtest, freq=COUNT,
++    control = list(startValJitter=.1) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( anova(fit, fitLBD, fitSat, pval=TRUE) )
+Model 1: ~ L * A + L * B + L * C + L * D
+Model 2: ~ L * A + L * B + L * C + L * D + L * B * D
+Model 3: ~ A * B * C * D
+  resid.df -2*loglik df  change   pval
+1        6   -3070.8                  
+2        4   -3072.0  2  1.1872 0.5523
+3        0   -3087.1  4 15.0400 0.0046
+> fitLCD <- cvam( ~ L*A + L*B + L*C + L*D + L*C*D, 
++    data=hivtest, freq=COUNT,
++    control = list(startValJitter=.1) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( anova(fit, fitLCD, fitSat, pval=TRUE) )
+Model 1: ~ L * A + L * B + L * C + L * D
+Model 2: ~ L * A + L * B + L * C + L * D + L * C * D
+Model 3: ~ A * B * C * D
+  resid.df -2*loglik df  change   pval
+1        6   -3070.8                  
+2        4   -3072.7  2  1.8402 0.3985
+3        0   -3087.1  4 14.3871 0.0062
+> fitBoth <- cvam( ~ L*A + L*B + L*C + L*D + L*A*D + L*B*C, 
++    data=hivtest, freq=COUNT,
++    control = list(startValJitter=.1) )
+Note: Estimate at or near boundary
+Estimated variances may be unreliable
+> print( anova(fitLAD, fitBoth) )
+Model 1: ~ L * A + L * B + L * C + L * D + L * A * D
+Model 2: ~ L * A + L * B + L * C + L * D + L * A * D + L * B * C
+  resid.df -2*loglik df      change
+1        4     -3084               
+2        2     -3084  2 -1.2725e-06
+> print( anova(fitLBC, fitBoth) )
+Model 1: ~ L * A + L * B + L * C + L * D + L * B * C
+Model 2: ~ L * A + L * B + L * C + L * D + L * A * D + L * B * C
+  resid.df -2*loglik df    change
+1        4     -3084             
+2        2     -3084  2 7.856e-07
+> 
+> # get predicted probabilities and display them with the dataset
+> pred <- cvamPredict( ~L, fitLBC, data=hivtest )
+> print( cbind( hivtest, round(pred, 3) ) )
+    A   B   C   D COUNT    L     1     2
+1 neg neg neg neg   170 <NA> 1.000 0.000
+2 neg neg neg pos    15 <NA> 1.000 0.000
+3 neg pos neg neg     6 <NA> 1.000 0.000
+4 pos neg neg neg     4 <NA> 1.000 0.000
+5 pos neg neg pos    17 <NA> 0.024 0.976
+6 pos neg pos pos    83 <NA> 0.000 1.000
+7 pos pos neg neg     1 <NA> 1.000 0.000
+8 pos pos neg pos     4 <NA> 0.004 0.996
+9 pos pos pos pos   128 <NA> 0.000 1.000
+> 
+> predFrame <- hivtest[1:8,]
+> predFrame$COUNT <- NULL
+> predFrame[["A"]][] <- NA
+> predFrame[["B"]][] <- NA
+> predFrame[["C"]][] <- NA
+> predFrame[["D"]][] <- NA
+> predFrame[["A"]][1] <- "pos"; predFrame[["A"]][2] <- "neg"
+> predFrame[["B"]][3] <- "pos"; predFrame[["B"]][4] <- "neg"
+> predFrame[["C"]][5] <- "pos"; predFrame[["C"]][6] <- "neg"
+> predFrame[["D"]][7] <- "pos"; predFrame[["D"]][8] <- "neg"
+> predFrame[["A"]] <- coarsened( predFrame[["A"]] )
+> predFrame[["B"]] <- coarsened( predFrame[["B"]] )
+> predFrame[["C"]] <- coarsened( predFrame[["C"]] )
+> predFrame[["D"]] <- coarsened( predFrame[["D"]] )
+> pred <- cvamPredict( ~L, fitLBC, data=predFrame )
+> print( cbind( predFrame, round(pred, 3) ) )
+     A    B    C    D    L     1     2
+1  pos <NA> <NA> <NA> <NA> 0.023 0.977
+2  neg <NA> <NA> <NA> <NA> 1.000 0.000
+3 <NA>  pos <NA> <NA> <NA> 0.050 0.950
+4 <NA>  neg <NA> <NA> <NA> 0.655 0.345
+5 <NA> <NA>  pos <NA> <NA> 0.000 1.000
+6 <NA> <NA>  neg <NA> <NA> 0.905 0.095
+7 <NA> <NA> <NA>  pos <NA> 0.062 0.938
+8 <NA> <NA> <NA>  neg <NA> 1.000 0.000
+> 
+> pred <- cvamPredict( ~L, fit, data=predFrame )
+> print( cbind( predFrame, round(pred, 3) ) )
+     A    B    C    D    L     1     2
+1  pos <NA> <NA> <NA> <NA> 0.975 0.025
+2  neg <NA> <NA> <NA> <NA> 0.000 1.000
+3 <NA>  pos <NA> <NA> <NA> 0.950 0.050
+4 <NA>  neg <NA> <NA> <NA> 0.343 0.657
+5 <NA> <NA>  pos <NA> <NA> 1.000 0.000
+6 <NA> <NA>  neg <NA> <NA> 0.093 0.907
+7 <NA> <NA> <NA>  pos <NA> 0.936 0.064
+8 <NA> <NA> <NA>  neg <NA> 0.000 1.000
+> 
+> 
+> # re-fit the model with EM using a small ridge factor
+> set.seed(7666)
+> fitLBC <- cvam( ~ L*A + L*B + L*C + L*D + L*B*C, 
++    data=hivtest, freq=COUNT, prior=cvamPrior( ridge=.1 ),
++    control = list(startValJitter=.1) )
+> # do a long run of MCMC and save ten imputed datasets
+> fitMCMC <- cvam(fitLBC, method="MCMC",
++    control=list( typeMCMC="RWM", tuneRWM=c(1000,.5),
++       iterMCMC=25000, imputeEvery=2500 ) )
+> # check to see if any label switching has occurred
+> impData <- get.imputedFreq(fitMCMC)
+> print( head(impData) )
+  L   A   B   C   D imp.1 imp.2 imp.3 imp.4 imp.5 imp.6 imp.7 imp.8 imp.9
+1 1 neg neg neg neg     0     0     0     0     0     0     0     0     0
+2 2 neg neg neg neg   170   170   170   170   170   170   170   170   170
+3 1 pos neg neg neg     0     0     0     0     0     0     0     0     0
+4 2 pos neg neg neg     4     4     4     4     4     4     4     4     4
+5 1 neg pos neg neg     0     0     0     0     0     0     0     0     0
+6 2 neg pos neg neg     6     6     6     6     6     6     6     6     6
+  imp.10
+1      0
+2    170
+3      0
+4      4
+5      0
+6      6
+> 
+> impData$freq <- impData[["imp.1"]] # first imputation
+> BCL <- xtabs( freq ~ B + C + L, data=impData )
+> print( BCL )
+, , L = 1
+
+     C
+B     neg pos
+  neg  17  83
+  pos   4 128
+
+, , L = 2
+
+     C
+B     neg pos
+  neg 189   0
+  pos   7   0
+
+> 
+> # use multiple imputations to examine the conditional
+> # BC odds ratios given L=1 and L=2
+> est.list <- SE.list <- as.list(1:10)
+> for( m in 1:10 ) {
++    # get the imputed marginal table BxCxL
++    impName <- paste( "imp", format(m), sep="." )
++    impData$freq <- impData[[impName]]
++    BCL <- xtabs( freq ~ B + C + L, data=impData )
++    # add 1/2 to every cell to avoid problems
++    BCL <- BCL + .5
++    # get BC log-odds ratio and SE for L=1
++    BCL.1 <- BCL[,,"1"]
++    logOR.1 <- log( ( BCL.1[1,1] * BCL.1[2,2] ) /
++       ( BCL.1[1,2] * BCL.1[2,1] ) )
++    SE.1 <- sqrt( sum( 1/BCL.1 ) )
++    # get BC log-odds ratio and SE for L=2
++    BCL.2 <- BCL[,,"2"]
++    logOR.2 <- log( ( BCL.2[1,1] * BCL.2[2,2] ) /
++       ( BCL.2[1,2] * BCL.2[2,1] ) )
++    SE.2 <- sqrt( sum( 1/BCL.2 ) )
++    # save the estimates and SEs
++    est.list[[m]] <- c( logOR.1, logOR.2 )
++    SE.list[[m]] <- c( SE.1, SE.2 )
++ }
+> print( miInference( est.list, SE.list ) )
+        Est      SE Est/SE           df     p Pct.mis
+[1,] 1.7716 0.54868  3.229 1.032946e+06 0.001     0.3
+[2,] 3.2311 2.03440  1.588 3.049459e+12 0.112     0.0
+> 
+> proc.time()
+   user  system elapsed 
+  0.665   0.066   0.696 

@@ -1,0 +1,3919 @@
+%SweaveUTF8
+%\VignetteIndexEntry{Fitting Log-Linear Models in cvam}
+%\VignetteDepends{tools}
+%\VignetteDepends{datasets}
+%\VignetteDepends{stats}
+%\VignetteDepends{nnet}
+%\VignetteDepends{MASS}
+%\VignetteDepends{xtable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[12pt]{article}
+
+\usepackage{graphicx}
+\usepackage{charter}  % nicer font package
+\usepackage{booktabs}
+
+% set margins, etc
+\usepackage[text={6in,8.5in},footskip=.5in,centering,letterpaper]{geometry}
+\parskip = 6pt
+
+\usepackage{fancyhdr}
+% default page style
+\pagestyle{fancy}
+\fancyhead[L,C]{}
+\fancyhead[R]{\nouppercase{\textsc\leftmark}}
+\fancyfoot[R]{\thepage}
+%\fancyfoot[c]{\small\textsf{Draft -- Not Cleared for Public Release}}
+% plain page style for title page, front matter
+\fancypagestyle{plain}{%
+\fancyhf{} % clear all header and footer fields
+\fancyfoot[R]{\thepage}
+%\fancyfoot[c]{\small\textsf{Draft -- Not Cleared for Public Release}}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}}
+\addtolength{\headheight}{.1in}
+
+\usepackage{fancyvrb} % extended verbatim environments
+  \fvset{fontsize=\normalsize}% default font size for fancy-verbatim
+
+\usepackage{Sweave}
+\usepackage{amsmath}  % extended mathematics
+\usepackage{amssymb}  % extended mathematics
+
+% required for bibliography
+\usepackage{natbib}
+
+% custom math abbreviations for this document
+\newcommand{\I}{\mathrm{i}}
+\newcommand{\be}{\begin{equation}}
+\newcommand{\bea}{\begin{eqnarray}}
+\newcommand{\ee}{\end{equation}}
+\newcommand{\eea}{\end{eqnarray}}
+\newcommand{\nn}{\nonumber}
+\newcommand{\bX}{{\mbox{\boldmath $X$}}}
+\newcommand{\bx}{{\mbox{\boldmath $x$}}}
+\newcommand{\bY}{{\mbox{\boldmath $Y$}}}
+\newcommand{\by}{{\mbox{\boldmath $y$}}}
+\newcommand{\bZ}{{\mbox{\boldmath $Z$}}}
+\newcommand{\bz}{{\mbox{\boldmath $z$}}}
+\newcommand{\bT}{{\mbox{\boldmath $T$}}}
+\newcommand{\ba}{{\mbox{\boldmath $a$}}}
+\newcommand{\bb}{{\mbox{\boldmath $b$}}}
+\newcommand{\bA}{{\mbox{\boldmath $A$}}}
+\newcommand{\bB}{{\mbox{\boldmath $B$}}}
+\newcommand{\bC}{{\mbox{\boldmath $C$}}}
+\newcommand{\bc}{{\mbox{\boldmath $c$}}}
+\newcommand{\bD}{{\mbox{\boldmath $D$}}}
+\newcommand{\bd}{{\mbox{\boldmath $d$}}}
+\newcommand{\bH}{{\mbox{\boldmath $H$}}}
+\newcommand{\bG}{{\mbox{\boldmath $G$}}}
+\newcommand{\bL}{{\mbox{\boldmath $L$}}}
+\newcommand{\bM}{{\mbox{\boldmath $M$}}}
+\newcommand{\bN}{{\mbox{\boldmath $N$}}}
+\newcommand{\bI}{{\mbox{\boldmath $I$}}}
+\newcommand{\bP}{{\mbox{\boldmath $P$}}}
+\newcommand{\bQ}{{\mbox{\boldmath $Q$}}}
+\newcommand{\bR}{{\mbox{\boldmath $R$}}}
+\newcommand{\bS}{{\mbox{\boldmath $S$}}}
+\newcommand{\bU}{{\mbox{\boldmath $U$}}}
+\newcommand{\bu}{{\mbox{\boldmath $u$}}}
+\newcommand{\bV}{{\mbox{\boldmath $V$}}}
+\newcommand{\bv}{{\mbox{\boldmath $v$}}}
+\newcommand{\bvsub}{{\mbox{\boldmath\scriptsize $v$}}}
+\newcommand{\basub}{{\mbox{\boldmath\scriptsize $a$}}}
+\newcommand{\bbsub}{{\mbox{\boldmath\scriptsize $b$}}}
+\newcommand{\bcsub}{{\mbox{\boldmath\scriptsize $c$}}}
+\newcommand{\bW}{{\mbox{\boldmath $W$}}}
+\newcommand{\bK}{{\mbox{\boldmath $K$}}}
+\newcommand{\bp}{{\mbox{\boldmath $p$}}}
+\newcommand{\bn}{{\mbox{\boldmath $n$}}}
+\newcommand{\bo}{{\mbox{\boldmath $o$}}}
+\newcommand{\bzero}{{\mbox{\boldmath $0$}}}
+\newcommand{\bone}{{\mbox{\boldmath $1$}}}
+\newcommand{\bmu}{{\mbox{\boldmath $\mu$}}}
+\newcommand{\bnu}{{\mbox{\boldmath $\nu$}}}
+\newcommand{\bbeta}{{\mbox{\boldmath $\beta$}}}
+\newcommand{\Beta}{B}
+\newcommand{\balpha}{{\mbox{\boldmath $\alpha$}}}
+\newcommand{\bgamma}{{\mbox{\boldmath $\gamma$}}}
+\newcommand{\bdelta}{{\mbox{\boldmath $\delta$}}}
+\newcommand{\bepsilon}{{\mbox{\boldmath $\epsilon$}}}
+\newcommand{\blambda}{{\mbox{\boldmath $\lambda$}}}
+\newcommand{\bomega}{{\mbox{\boldmath $\omega$}}}
+\newcommand{\bfeta}{{\mbox{\boldmath $\eta$}}}
+\newcommand{\btheta}{{\mbox{\boldmath $\theta$}}}
+\newcommand{\bTheta}{{\mbox{\boldmath $\Theta$}}}
+\newcommand{\bphi}{{\mbox{\boldmath $\phi$}}}
+\newcommand{\bpsi}{{\mbox{\boldmath $\psi$}}}
+\newcommand{\bPsi}{{\mbox{\boldmath $\Psi$}}}
+\newcommand{\bxi}{{\mbox{\boldmath $\xi$}}}
+\newcommand{\bpi}{{\mbox{\boldmath $\pi$}}}
+\newcommand{\bSigma}{{\mbox{\boldmath $\Sigma$}}}
+\newcommand{\bGamma}{{\mbox{\boldmath $\Gamma$}}}
+\newcommand{\bLambda}{{\mbox{\boldmath $\Lambda$}}}
+\newcommand{\bOmega}{{\mbox{\boldmath $\Omega$}}}
+\newcommand{\bcomma}{{\mbox{\boldmath $,$}}}
+\newcommand{\bcolon}{{\mbox{\boldmath $:$}}}
+\newcommand{\bplus}{{\mbox{\textbf{+}}}}
+% symbol for independence
+\newcommand\independent{\protect\mathpalette{\protect\independenT}{\perp}}
+\def\independenT#1#2{\mathrel{\rlap{$#1#2$}\mkern2mu{#1#2}}} 
+% absolute value and vector norm
+\newcommand{\abs}[1]{\lvert#1\rvert}
+\newcommand{\norm}[1]{\lVert#1\rVert}
+% argmin and argmax
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+
+% new description environment for documenting arguments
+% to R functions 
+\newenvironment{mydescription}
+{   \let\olddescriptionlabel=\descriptionlabel
+   \renewcommand{\descriptionlabel}[1]{
+      \hspace{\labelsep}\hspace{1em}\texttt{##1}\,\upshape{:}} 
+   \begin{description} }
+{  \end{description} 
+   \let\descriptionlabel=\olddescriptionlabel }
+
+% changes to the way R code is displayed in code chunks
+\SweaveOpts{keep.source=TRUE}
+\fvset{listparameters={\setlength{\topsep}{0pt}}}
+\DefineVerbatimEnvironment{Sinput}{Verbatim}{
+  xleftmargin=2em,fontsize=\footnotesize,fontshape=sl}
+\DefineVerbatimEnvironment{Soutput}{Verbatim}{
+  xleftmargin=2em,fontsize=\scriptsize}
+\DefineVerbatimEnvironment{Scode}{Verbatim}{
+  xleftmargin=2em,fontsize=\footnotesize,fontshape=sl}
+\renewenvironment{Schunk}{\vspace{\topsep}}{\vspace{\topsep}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\title{Log-Linear Modeling with Missing and Coarsened Values Using the
+\texttt{cvam} Package} 
+\author{Joseph L. Schafer\thanks{Office of the Associate Director for
+    Research and Methodology, United States Census Bureau, Washington,
+    DC 20233, \texttt{joseph.l.schafer@census.gov}. This article is released to
+    inform interested parties of ongoing research and to encourage
+    discussion. The views expressed are those of the author and not
+    necessarily those of the U.S. Census Bureau.}}
+\date{\today}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+
+Log-linear models, when applied to frequencies in a multiway table,
+describe associations among categorical variables (factors) that define the
+dimensions of the table. The R package \texttt{cvam} fits log-linear
+models to factors that may have missing and coarsened values,
+including latent-class models. This
+document provides  a quick review of log-linear models and explains
+\texttt{cvam}'s modeling functions with examples. We assume the reader
+understands basic ideas of factors and coarsened factors, as described
+in the separate document \textit{Understanding Coarsened Factors in
+\texttt{cvam}}.
+\end{abstract} 
+\newpage
+
+\thispagestyle{plain}
+
+\noindent{\em This work was produced at the U.S. Census Bureau in the
+  course of official duties and, pursuant to Title 17 Section 105 of
+  the United States Code, is not subject to copyright protection
+  within the United States.  Therefore, there is no copyright to
+  assign or license and this work may be used, reproduced or
+  distributed within the United States.  This work may be modified
+  provided that any derivative works bear notice that they are derived
+  from it, and any modified versions bear some notice that they have
+  been modified, as required by Title 17, Section 403 of the United
+  States Code.  The U.S. Census Bureau may assert copyright
+  internationally.  To this end, this work may be reproduced and
+  disseminated outside of the United States, provided that the work
+  distributed or published internationally provide the notice:
+  ``International copyright, 2016, U.S. Census Bureau,
+  U.S. Government''.  The author and the Census Bureau assume no
+  responsibility whatsoever for the use of this work by other parties,
+  and makes no guarantees, expressed or implied, about its quality,
+  reliability, or any other characteristic.  The author and the Census
+  Bureau are not obligated to assist users or to fix reported problems
+  with this work.  For additional information, refer to GNU General
+  Public License Version 3 (GPLv3).}
+\newpage
+
+
+\section{Introduction}
+
+In the companion document \textit{Understanding Coarsened Factors in
+\texttt{cvam}}, we introduced a new class of R objects for storing
+categorical variables with coarsened values, but said little about how
+or why they ought to be used. In this present document, we show how to
+model relationships among categorical variables using functions in the
+\texttt{cvam} package. These functions were designed with coarsened
+factors in mind, but they also accept ordinary factors with or without
+missing values.
+
+Before diving in to the specifics of \texttt{cvam}, we give some
+background material to show how log-linear models work with complete
+data. In Section \ref{sec:objects}, we review four different types of
+objects for storing categorical variables and show how to convert data
+from one format to another. Section \ref{sec:loglin} gives a quick
+overview of log-linear modeling in the complete-data case,
+establishing the notation and assumptions. The
+remaining sections cover the special \texttt{cvam} functions and
+object classes, with examples using datasets distributed with the
+package. Technical details of the computational methods are provided
+in the appendices.
+
+\section{Storing and manipulating categorical data\label{sec:objects}}
+
+\subsection{Multidimensional contingency tables}
+
+Contingency tables are arrays of frequencies that result from classifying
+individuals or sample units by one or more categorical factors. Each
+dimension of the array corresponds to a factor. In R, a contingency table
+object has a \texttt{class} attribute of \texttt{"table"} or
+\texttt{c("xtabs", "table")}, depending on which function
+(\texttt{table} or \texttt{xtabs}) created it.
+
+A well known example of a contingency table pertaining to gender bias
+in graduate admissions was published by
+\cite{bickel1975sex}. The $2\times 2\times 6$ table
+\texttt{UCBAdmissions}, distributed with R as part of the
+\texttt{datasets} package, classifies 4,526 applicants to
+U.C. Berkeley  by admission status, sex, and department.
+<<"UCBA.A", echo=TRUE>>=
+# show the structure of the object
+str(UCBAdmissions)
+# display slices of the table corresponding to Dept "A" and "B"
+UCBAdmissions[,,1:2]
+@
+To collapse a contingency table over one or more of its
+dimensions and obtain marginal frequencies, use
+the \texttt{apply} function with argument \texttt{FUN=sum}. 
+<<"UCBA.B", echo=TRUE>>=
+# one-way table for Dept (dimension 3)
+apply( UCBAdmissions, 3, sum )
+# two-way table for Gender x Admit (dimensions 2 and 1),
+# with chisquare test for independence
+GenderByAdmit <- apply( UCBAdmissions, c(2,1), sum )
+chisq.test( GenderByAdmit )
+@
+Contingency tables offer compact storage when the
+number of factors is small, but the number of factors grows, the size
+of these tables increases rapidly. High-dimensional tables tend to be
+sparse, with many of the cells containing very few or no observations.
+
+\subsection{Data frame with microdata}
+
+Categorical variables may be kept as microdata, in a data frame with
+one row per individual or sample unit and one column for each factor.
+To illustrate, we simulated a microdata version of the U.C. Berkeley
+Admissions dataset with 4,526 rows and three factors. The data frame,
+called \texttt{microUCBAdmissions}, is distributed with the
+\texttt{cvam} package.
+<<"UCBA.C", echo=TRUE>>=
+library(cvam)
+# display the first few rows
+head(microUCBAdmissions)
+@
+Microdata can be transformed into frequency tables by the functions
+\texttt{table} or \texttt{xtabs}.
+<<"UCBA.D", echo=TRUE>>=
+dF <- microUCBAdmissions  # to save typing
+# this reproduces the 3-way table UCBAdmissions
+result <- table( Admit = dF$Admit, 
+   Gender = dF$Gender, Dept = dF$Dept )
+str(result)
+all.equal( result, UCBAdmissions )
+# do the same thing with xtabs, which accepts formula notation
+result <- xtabs( ~ Admit + Gender + Dept, data=microUCBAdmissions )
+@
+For this example, the microdata object is much larger than the
+contingency table, but that is not always the case. Microdata may be
+more compact when the number of factors is
+large, because combinations of factor levels that do not occur in the
+sample are absent. Microdata files may also include variables that
+are continuously distributed, which may be impractical for
+contingency-table storage unless they are first binned into
+factors with a small number of levels.
+
+\subsection{Data frame with grouped data}
+
+In the grouped data frame format, units having identical values for all
+variables are collapsed into a single row of the data frame, and another
+variable is added to record frequencies.  
+A grouped data frame can be produced from a 
+\texttt{table} or \texttt{xtabs} object using
+\texttt{as.data.frame}
+<<"UCBA.E", echo=TRUE>>=
+result <- as.data.frame(UCBAdmissions) 
+head(result)
+@
+The result from \texttt{as.data.frame} has one row for each
+cell in the table, including the empty cells.
+
+To convert microdata to grouped data, use the \texttt{aggregate} function.
+<<"UCBAe", echo=TRUE>>=
+# create a Freq variable and fill it with ones
+microUCBAdmissions$Freq <- 1
+# use aggregate to sum the Freq variable within categories of
+# Admit, Gender, and Dept
+result <- aggregate( Freq ~ Admit + Gender + Dept,
+   data=microUCBAdmissions, FUN=sum )
+head(result)
+@
+The grouped data frame has one row for each unique combination of
+the grouping factors (i.e., the variables on the right-hand side of
+the formula) that appear in the microdata.
+
+When using \texttt{aggregate}, it is important to keep two
+behaviors in mind. 
+\begin{itemize}
+\item \emph{The resulting data frame does not include empty
+cells.} Conventional log-linear modeling with \texttt{glm}, which we
+will demonstrate in Section \ref{sec:loglin}, requires a data frame
+that includes rows for the empty cells with frequencies of zero. To
+include the empty cells, process the microdata with \texttt{table} or
+\texttt{xtabs} followed by \texttt{as.data.frame}.
+\item \emph{By default, rows of the microdata frame that contain missing
+values are dropped from the result.} A primary reason for using
+\texttt{cvam} is that it will allow us to fit log-linear models to all
+records, including those with missing or coarsened values. 
+\end{itemize}
+
+\subsection{Flat tables}
+
+Flat tables, produced by \texttt{ftable}, are 
+two-dimensional representations of contingency tables that are
+convenient for display and publication. They can be created from
+contingency tables and from microdata. Some examples are shown below. 
+<<"UCBA.F", echo=TRUE>>=
+# from a table, specifying the row and column variables
+ftable( UCBAdmissions, row.vars=c("Dept","Gender"), col.vars="Admit")
+# from microdata, using a formula interface
+ftable( Admit ~ Dept + Gender, data=microUCBAdmissions )
+# with one row variable and two column variables 
+ftable( UCBAdmissions, row.vars=c("Dept"),
+   col.vars=c("Gender","Admit"))
+# omitted variables are summed over
+ftable( Admit ~ Gender, data=microUCBAdmissions )
+@
+The \texttt{ftable} function was designed for visual
+displays, but not for rearranging categorical data for subsequent
+analysis.  Contributed packages for managing and reshaping are be 
+helpful in that regard, especially \texttt{reshape2} 
+\citep{wickham2007reshaping}.
+
+\section{Fitting log-linear models with complete data\label{sec:loglin}}
+
+\subsection{What is a log-linear model?}
+
+Log-linear models describe relationships among the factors in a
+cross-classification. Consider a pair of categorical variables
+$A$ and $B$ recorded for a sample of units. Let
+$a$ and $b$ denote possible values for $A$ and $B$,
+and let $\pi_{ab}=P(A=a,B=b)$. If the two variables are independent,
+then the relationship 
+\[
+\pi_{ab}\,=\,P(A=a)\,\times\,P(B=b)
+\]
+must hold for every combination of $a$ and $b$. Assuming that none of
+the probabilities 
+are zero, independence is equivalent to saying that the
+log-probabilities have an additive structure,
+\begin{equation}
+\log \pi_{ab}\,=\,\log P(A=a)\,+\,\log P(B=b).
+\label{eq:indep}
+\end{equation}
+In a manner similar to analysis of variance (ANOVA) for a two-way factorial
+designs, we may decompose the log-cell probabilities as
+\begin{equation}
+\log \pi_{ab} \,=\,
+\lambda \,+\,
+\lambda^{A}_a \,+\,
+\lambda^{B}_b \,+\,
+\lambda^{AB}_{ab},
+\label{eq:anova}
+\end{equation}
+where the $\lambda$ terms sum to zero over any subscript,
+\[
+\sum_a \lambda^A_a\,=\,\sum_b \lambda^B_b\,=\,\sum_a\lambda^{AB}_{ab}
+=\,\sum_b\lambda^{AB}_{ab}\,=\,0.
+\]
+The decomposition (\ref{eq:anova}) implies independence
+(\ref{eq:indep}) if all the $\lambda^{AB}_{ab}$ terms are zero. 
+
+Despite the apparent similarity to ANOVA, there are some
+important differences. 
+\begin{itemize}
+\item Two-way ANOVA involves a third variable, a response that is
+being predicted by the two factors. In the log-linear model,
+the ``response'' is not a random variable, but a set of
+log-probabilities defining the joint distribution of the factors. The
+log-linear model is a joint model for $A$ and $B$, not a model for
+some other variable given $A$ and $B$.
+\item In ANOVA, the parameter analogous to $\lambda$ in Equation 
+(\ref{eq:anova}) is a grand mean, the expected value of the
+response variable averaged over all cells of the design. In the
+log-linear model, $\lambda$ is not a parameter, but a normalizing
+constant chosen to ensure that the cell probabilities $\pi_{ab}$ sum
+to one.
+\item In ANOVA, the simplest model worth considering is the
+intercept-only model in which all the main effects $\lambda^A_a$ and
+$\lambda^B_a$ and all the interactions $\lambda^{AB}_{ab}$ are zero.
+In  log-linear modeling, the
+simplest  model worth considering includes $\lambda^A_a$ and
+$\lambda^B_a$ but omits $\lambda^{AB}_{ab}$.
+Dropping $\lambda^A_{a}$ and $\lambda^{AB}_{ab}$ would imply
+not only that $A$ is independent of $B$, but also that $A$ is
+uniformly distributed with equal probabilities over its levels, a
+model that is rarely of interest.
+\end{itemize}
+
+To avoid a proliferation of letters and subscripts, we now switch to
+notation that can accommodate any number of variables.  The full
+details of this notation are given in \ref{app:notation}. Let
+$\bV=(V_1,\ldots,V_J)$ denote a vector of $J$ categorical
+variables to be modeled, and let $\bv=(v_1,\ldots,v_J)$ denote a
+possible value for $\bV$.  (Throughout this document, vectors,
+matrices and higher-dimensional arrays are written in boldface type,
+and scalars are in lightface.) The probability that a randomly selected
+unit in the population has $\bV=\bv$ is
+\[
+\pi_\bvsub\,=\,P(\bV=\bv),
+\]
+and the array of these probabilities for all possible $\bv$ is denoted by
+$\bpi$. The shape of $\bpi$ depends on how the data are arranged. If the
+data are stored as a contingency table, then $\bpi$ is a
+$J$-dimensional array whose dimensions correspond to the factors
+$V_1,\ldots,V_J$. If the data are stored as a data frame with grouped
+observations, then $\bpi$ is a vector with one element for each row of
+the data frame. Either way, $\bpi$ has the same number of elements,
+assuming that the data frame includes rows for any empty cells. 
+Obviously, the sum of these elements over all cells, which we denote
+by $\pi_+$, must be equal to one.
+
+If $V_1,\ldots,V_J$ are fully observed in a random sample of $N$
+units, we can form the contingency table of frequencies which we call
+$\mbox{\boldmath $f$}$, with the same size and shape as
+$\bpi$. An element of $\mbox{\boldmath $f$}$ is $\mbox{\boldmath
+$f$}_\bvsub$. Regarding $N$ and $\bpi$ as fixed, $\mbox{\boldmath $f$}$
+has a multinomial distribution
+\begin{equation}
+\mbox{\boldmath $f$}\,|\,N,\bpi \,\sim\,
+\mbox{Mult}(N,\bpi).
+\label{eq:loglinA}
+\end{equation}
+A log-linear model is an assumption that the vectorized
+$\bpi$ has the form
+\begin{equation}
+\log \bpi\,=\,\bX\blambda,
+\label{eq:loglinB}
+\end{equation}
+where $\bX$ is a known model matrix with $p$ columns, 
+$\blambda=(\lambda_1,\ldots,\lambda_p)$ is a vector of unknown
+coefficients, and `log $\bpi$' means taking the natural logarithm
+of each element of $\bpi$. In most cases, the first column of $\bX$ is
+filled with ones, and the remaining columns are terms for the
+main effects of the factors $V_1,\ldots,V_J$ and the interactions
+among them, the same kind of terms that would appear in a
+regression/ANOVA model with $V_1,\ldots,V_J$ as predictors. A more
+nuanced definition of a log-linear model is given in \ref{app:loglin}.
+
+Under the multinomial distribution, the expected value of
+$\mbox{\boldmath $f$}$ is $\bmu\,=\,N\bpi$. The log-linear model can
+be written in terms of $\bmu$ as
+\begin{equation}
+\log\bmu\,=\,\bX\bbeta.
+\label{eq:loglinMu}
+\end{equation}
+If the first column of $\bX$ is filled with ones, then $\bbeta$ is
+identical to $\blambda$, except that the first element has been shifted
+upward by $\log N$. Just as the first element of $\blambda$ is a
+normalizing constant that ensures $\pi_+ = 1.0$, the first element of
+$\bbeta$ is a normalizing constant that ensures $\mu_+ = N$.
+
+\subsection{Fitting techniques}
+
+The most common way to fit a log-linear
+model is to treat it as a generalized
+linear model with a Poisson response, regressing $\mbox{\boldmath
+$f$}$ on $\bX$ with a log link \citep{mccullagh1989generalized,
+agresti2013categorical}. The Poisson and
+multinomial models differ in certain ways. Notably, the Poisson
+model regards $N$ as a random variable, turning the first element of
+$\bbeta$ into a free parameter. Despite those differences, Poisson
+regression serves as an appropriate surrogate for the multinomial
+model and does give correct answers, for reasons explained in 
+\ref{app:sampling}. 
+
+In the special case where the number of
+columns of $\bX$ and its number of rows are equal, the model is said
+to be saturated. Under a saturated model, the ML estimate is simply
+$\hat{\bmu}=\mbox{\boldmath $f$}$, and (assuming there are no zeros)
+the coefficients can be obtained by
+$\hat{\bbeta}=\bX^{-1}\log\hat{\bmu}$, because $\bX$ is invertible.
+For non-saturated models, 
+$\hat{\bbeta}$ may be computed by a Newton-Raphson (NR) procedure,
+also known as Fisher scoring or iteratively reweighted least squares
+ \citep{mccullagh1989generalized}. Details of NR are given in
+ \ref{app:NR}.  
+The fitted values from the Poisson regression are
+$\hat{\bmu}=\bX\hat{\bbeta}$. The fitted values for the
+multinomial model are $\hat{\bpi}=N^{-1}\hat{\bmu}$, 
+and the estimated coefficients for the
+multinomial model are
+\begin{eqnarray}
+\hat{\lambda}_1 & = & \hat{\beta}_1 \,-\,\log N, \nn\\
+\hat{\lambda}_k & = & \hat{\beta}_k \;\;\;\mbox{for $k=2,\ldots,p$}.
+\nn
+\end{eqnarray}
+The estimated covariance matrix for $\hat{\bbeta}$ supplied by the
+Poisson-regression software is a appropriate for both $\hat{\bbeta}$
+and $\hat{\blambda}$ under the Poisson model, except that the first
+row and column should be ignored (i.e., set to zero), because the
+first element of $\bbeta$ and $\blambda$ are normalizing constants.
+
+An older method for fitting log-linear models, called iterative
+proportional fitting (IPF), operates directly on margins of the
+contingency table \citep{bishop1975discrete}.  IPF does not use a
+model matrix $\bX$, so it does not provide estimated 
+coefficients $\hat{\bbeta}$ or $\hat{\blambda}$, but the fitted values
+$\hat{\bmu}$ and $\hat{\pi}$ from IPF are identical to those that we
+would get from NR, if the latter converges. IPF is more stable than
+NR and does not encounter difficulty if the ML estimate is
+non-unique or lies on a boundary. (That stability is not always
+desirable, however, because if a problem exists, many users would want
+to be warned.) For
+some log-linear models, ML estimates are available in closed form;
+these are said to be decomposable
+\citep{lauritzen1996graphical}.  If a model is decomposable, IPF
+converges after a single cycle, but NR does not. If a model is
+non-decomposable, IPF tends to converge more slowly.
+
+\subsection{Model interpretation}
+
+In a log-linear model, the meaning of the coefficients in $\blambda$
+or $\bbeta$ depends on the coding scheme used to define the model
+matrix.  These coefficients can be difficult to interpret, and instead
+of focusing on them, it is more important to understand the model
+holistically in terms of the kinds of relationships among
+$V_{i1},\ldots,V_{iJ}$ that it allows.
+
+Most readers should be familiar with the
+formula notation used by the R functions \texttt{lm}
+and \texttt{glm}. For example, \texttt{Y $\sim$ V1 + V2} denotes a
+regression for predicting \texttt{Y} with main effects for \texttt{V1}
+and \texttt{V2}. A model with main effects and interaction terms is
+\texttt{Y $\sim$ V1 + V2 + V1:V2} or, equivalently, \texttt{Y $\sim$
+V1*V2}.  Redundancy in a formula is
+not a problem; for example, if you specify \texttt{Y $\sim$ V1 + V2 +
+V1*V2}, the main effects for \texttt{V1} and \texttt{V2} will not be
+included twice. Even \texttt{Y $\sim$ V1 + V1 + V1} will not cause an
+error, because R's formula interpreter removes duplicate symbols
+automatically.
+
+In this discussion, we will represent log-linear models by
+one-sided formulas, with nothing on the left-hand side.
+By convention, we will only consider models
+that are \emph{hierarchical}, which means that, if an interaction
+among a group of variables is present, then all main effects and
+lower-order interactions within the group must also be present. For
+example, if we include \texttt{V1:V2:V3}, then we must also include
+\texttt{V1}, \texttt{V2}, \texttt{V3}, \texttt{V1:V2}, \texttt{V1:V3},
+and \texttt{V2:V3}.  An easy way to ensure that a model is
+hierarchical is to avoid `\texttt{:}' and only use `\texttt{*}'. Using
+`\texttt{*}' allows us to represent the model by just its highest-order
+terms, because the lower-order terms will then be included automatically.
+
+Many hierarchical models can be described in terms of independence and
+conditional independence. For example, with three variables, we may have:
+\begin{itemize}
+\item \emph{complete independence}, as in \texttt{$\sim$ V1 + V2 + V3}.
+\item \emph{two variables independent of a third}, as in
+\texttt{$\sim$ V1*V2 + V3}, which allows \texttt{V1} and \texttt{V2} to be
+related, but requires them to be jointly independent of
+\texttt{V3}. Similarly for   
+\texttt{$\sim$ V1*V3 + V2} and \texttt{$\sim$ V2*V3 + V1}.
+\item \emph{two variables conditionally independent given a third},
+such as \texttt{$\sim$ V1*V2 + V1*V3}, which means that \texttt{V2} and
+\texttt{V3} are unrelated at any fixed value of \texttt{V1}. Similarly
+for \texttt{$\sim$ V1*V2 + V2*V3} and \texttt{$\sim$ V1*V3 + V2*V3}.
+\item \emph{the saturated model}, \texttt{$\sim$ V1*V2*V3}, which allows
+arbitrary relationships among the three variables.
+\end{itemize}
+The only remaining hierarchical model with three variables is
+\texttt{$\sim$ V1*V2 + V1*V3 + V2*V3}, the
+model of \emph{homogeneous association}.  This model requires the odds
+ratios between any 
+two variables, when conditioned on the third, to be constant across
+levels of the third. For example, the odds ratios between \texttt{V1}
+and \texttt{V2} within any slice of the table that holds \texttt{V3}
+constant are identical across all such slices. 
+
+Multivariate models are sometimes represented graphically, with nodes
+corresponding to variables and edges indicating relationships among
+them. The absence of edges conveys assumptions of independence and
+conditional independence \citep{lauritzen1996graphical,
+whittaker2009graphical}. Some log-linear models, e.g., the model of
+homogeneous association, do not have a graphical representation. To be
+graphical, a model that has all two-way associations among a
+group of variables must include all higher-way associations as well. For
+example, if a graphical model has \texttt{V1*V2}, \texttt{V1*V3}, and
+\texttt{V2*V3}, then it must also have \texttt{V1*V2*V3}.
+
+Log-linear models are also closely related to logistic regression.  A
+logistic model for predicting a categorical outcome from categorical
+covariates can be fit as a joint log-linear model for the outcome and
+covariates, provided that the log-linear model includes all possible
+associations among the covariates. For example, the log-linear model
+represented by \texttt{$\sim$ V1*V2*V3 + V1*V4 + V2*V3*V4} implies the
+logistic model \texttt{V4 $\sim$ V1 + V2*V3}. Fitting
+the log-linear model can be computationally more demanding,
+because it requires estimating nuisance parameters (the associations
+among the covariates) which do not appear in the logistic version.
+For more discussion on the relationships between log-linear and logistic
+models, see \cite{christensen2006log}.
+
+\subsection{Fitting log-linear models with conventional R functions}
+
+\subsubsection{Conditional odds ratios from the U.C. Berkeley
+admissions data}
+
+Returning to the dataset \texttt{UCBAdmissions} from Section
+\ref{sec:objects}, we now show how to fit log-linear models using
+various R functions. Because these data have been analyzed \emph{ad
+nauseum}, we use them for demonstration purposes but will
+not belabor their interpretation. To begin, we display the
+$2\times 2$ marginal table with \texttt{Gender} as the row and
+\texttt{Admit} as the column and compute the marginal odds ratio.
+<<"loglinExA", echo=TRUE>>=
+# display observed marginal table and odds ratio
+marg <- apply( UCBAdmissions, c(2,1), sum )
+marg
+marg[1,1] * marg[2,2] / ( marg[2,1] * marg[1,2] )
+@
+The value of 1.84 implies that, on the odds scale, male applicants
+were 84\% more likely than female applicants to gain admission to
+graduate school. Within levels of \texttt{Dept}, however, the conditional 
+odds ratios tell a different story.
+<<"loglinExB", echo=TRUE>>=
+# display odds ratios for each department
+UCBAdmissions[1,1,] * UCBAdmissions[2,2,] / 
+   ( UCBAdmissions[1,2,] * UCBAdmissions[2,1,] )
+@
+Male applicants had lower odds of admission than females in
+departments \texttt{A}, \texttt{B}, \texttt{D}, and \texttt{F}, and
+higher odds of admission than females in departments \texttt{C} and
+\texttt{E}. We will examine the statistical significance of these 
+conditional effects by comparing the fits of three log-linear models,
+\begin{eqnarray}
+\mbox{\texttt{M0:}} & \!\!\!\!\! &
+\texttt{$\sim$ Dept*Gender + Dept*Admit}, \nn\\
+\mbox{\texttt{M1:}} & \!\!\!\!\! &
+\texttt{$\sim$ Dept*Gender + Dept*Admit + Gender*Admit}, \nn\\
+\mbox{\texttt{M2:}} & \!\!\!\!\! &
+\texttt{$\sim$ Dept*Gender*Admit}.
+\nn
+\end{eqnarray}
+Model \texttt{M0} fixes the conditional odds ratio in every
+department at one; \texttt{M1} forces the conditional
+odds ratios to be equal, but does not constrain their common value;
+and \texttt{M2} allows the conditional odds ratios to vary. 
+The models are nested in the sense that $\mbox{\texttt{M0}} \subset
+\mbox{\texttt{M1}} \subset \mbox{\texttt{M2}}$, so we can compare them by
+likelihood-ratio (LR) chi-squared tests  based on their deviance
+statistics. The test of \texttt{M0} against \texttt{M1} has one
+degree of freedom, because the models differ by one parameter, and the
+test of \texttt{M1} against \texttt{M2} has five degrees of
+freedom, because they differ by five parameters, The difference in fit between
+\texttt{M0} and \texttt{M2} can be partitioned into six
+independent statistics corresponding to tests for independence
+in the $2\times 2$ tables for each of the six departments.
+
+\subsubsection{Examples with \texttt{glm}}
+
+Using the Poisson trick, we regress the observed frequencies on the
+factors using \texttt{glm} with the argument
+\texttt{family=poisson()}, which by default applies a log link. This
+approach requires reshaping the contingency 
+table into a grouped data frame.
+<<"loglinExC", echo=TRUE>>=
+dF <- as.data.frame(UCBAdmissions)
+M0 <- glm( Freq ~ Dept*Gender + Dept*Admit, family=poisson(), data=dF )
+M1 <- glm( Freq ~ Dept*Gender + Dept*Admit + Gender*Admit,
+   family=poisson(), data=dF )
+M2 <- glm( Freq ~ Dept*Gender*Admit, family=poisson(), data=dF )
+@
+Instead of trying to interpret the coefficients of each model,
+we compute parameters of interest from the fitted
+values $\hat{\bmu}=\bX\hat{\bbeta}$.  For each model, we put
+$\hat{\bmu}$ into the data frame, then reshape the $\hat{\bmu}$ vector
+into a three-dimensional array with the factors as its dimensions.
+<<"loglinExD", echo=TRUE>>=
+dF$muHat0 <- predict(M0, type="response")
+dF$muHat1 <- predict(M1, type="response")
+dF$muHat2 <- predict(M2, type="response")
+fit0 <- xtabs( muHat0 ~ Admit + Gender + Dept, data=dF )
+fit1 <- xtabs( muHat1 ~ Admit + Gender + Dept, data=dF )
+fit2 <- xtabs( muHat2 ~ Admit + Gender + Dept, data=dF )
+@
+Examining the fitted conditional odds ratios within departments, we
+see that each of the models does what we expect.
+<<"loglinExE", echo=TRUE>>=
+# under M0, the fitted conditional OR's should be 1.0:
+fit0[1,1,] * fit0[2,2,] / ( fit0[1,2,] * fit0[2,1,] )
+
+# under M1, the fitted conditional OR's should be equal:
+fit1[1,1,] * fit1[2,2,] / ( fit1[1,2,] * fit1[2,1,] )
+
+# under M2, the fitted conditional OR's should vary, and they
+# should agree with corresponding OR's based on the observed
+# frequencies, because M2 is saturated:
+fit2[1,1,] * fit2[2,2,] / ( fit2[1,2,] * fit2[2,1,] )
+@
+Using \texttt{anova}, we display the deviance statistics for comparing
+\texttt{M0}, \texttt{M1}, and \texttt{M2}.
+<<"loglinExF", echo=TRUE>>=
+anova(M0,M1,M2)
+@
+<<"loglinExFa", echo=FALSE>>=
+d01 <- deviance(M0)-deviance(M1)
+d12 <- deviance(M1)-deviance(M2)
+d02 <- deviance(M0)-deviance(M2)
+@
+The deviance statistic for testing \texttt{M0} against
+\texttt{M1} is \Sexpr{round(d01, 4)}, which
+gives a p-value of $p = P(\chi^2_{1} \geq 
+\Sexpr{round(d01, 4)} ) = 
+\Sexpr{round(1-pchisq(d01,1),3)}$; the
+common conditional odds ratio estimated across departments is not significantly
+different from 1.0. The deviance for testing \texttt{M1} against
+\texttt{M2} is \Sexpr{round(d12, 4)}, which
+gives a p-value of $p = P(\chi^2_{5} \geq 
+\Sexpr{round(d12, 4)} ) = 
+\Sexpr{round(1-pchisq(d12,5),3)}$, so at least one of the conditional
+odds ratios is significantly different from the others. To see what
+is happening within the departments, we perform a separate test for
+independence for each department.
+<<"loglinExGa", echo=TRUE>>=
+# make a list of 6 data frames, one per department
+list2x2 <- as.list(1:6)
+for( j in 1:6 ) list2x2[[j]] <- subset(dF, Dept==levels(dF$Dept)[j]  )
+# function for computing deviance for LR test of independence
+# within a department
+myFunc <- function( dF ) {
+   M <- glm( Freq ~ Gender + Admit, family=poisson(), data=dF )
+   deviance(M)
+}
+# apply LR test to each department, returning a vector of deviances
+dev <- sapply( list2x2, myFunc )
+dev
+sum(dev)
+@
+Notice that the sum of the deviance test statistics across departments exactly
+matches the overall statistic for testing \texttt{M0} against
+\texttt{M2}. The only department with a conditional odds ratio that is
+significantly different from 1.0 is \texttt{"A"}.
+
+\subsubsection{Examples with \texttt{loglin}}
+
+The function \texttt{loglin} fits log-linear models using IPF. The
+data are supplied as a contingency table, and the model is specified
+not by a formula but by a list of integer vectors denoting
+highest-order effects that the model is fitting. In the
+three-dimensional table
+\texttt{UCBAdmissions}, the dimensions are
+\begin{eqnarray}
+\texttt{1} & \texttt{=} & \texttt{Admit}, \nn\\
+\texttt{2} & \texttt{=} & \texttt{Gender}, \nn\\
+\texttt{3} & \texttt{=} & \texttt{Dept}. \nn
+\end{eqnarray}
+In the integer notation of \texttt{loglin}, the model
+\[
+\mbox{\texttt{$\sim$ Dept*Gender + Dept*Admit}}
+\]
+is expressed as $\mbox{\texttt{list( c(3,2), c(3,1) )}}$;
+the model
+\[
+\mbox{\texttt{$\sim$ Dept*Gender + Dept*Admit + Gender*Admit}}
+\]
+becomes $\mbox{\texttt{list( c(3,2), c(3,1), c(2,1) )}}$;
+and the model
+\[
+\mbox{\texttt{$\sim$ Dept*Gender*Admit}}
+\]
+becomes $\mbox{\texttt{list( c(3,2,1) )}}$. 
+The \texttt{loglin} function returns a list of results, and if the argument
+\texttt{fit=TRUE} is supplied, that list will include a table of fitted
+values $\hat{\bmu}$.
+<<"loglinExH", echo=TRUE>>=
+# fit M0, M1, and M2 using loglin
+M0 <- loglin( UCBAdmissions, margin=list( c(3,2), c(3,1) ), fit=TRUE ) 
+M1 <- loglin( UCBAdmissions, margin=list( c(3,2), c(3,1), c(2,1) ), fit=TRUE ) 
+M2 <- loglin( UCBAdmissions, margin=list( c(3,2,1)), fit=TRUE ) 
+@
+For models \texttt{M0} and
+\texttt{M2}, the IPF procedure 
+stopped at iteration 2; apart from rounding error, the final
+solution was achieved at the end of the first cycle, because these
+models are decomposable. Before proceeding. let's make sure that the
+fitted values from \texttt{loglin}
+match the results we obtained from \texttt{glm}.
+<<"loglinExIa", echo=TRUE>>=
+max( abs( fit0 - M0$fit ) )
+max( abs( fit1 - M1$fit ) )
+max( abs( fit2 - M2$fit ) )
+@
+For \texttt{M0} and \texttt{M2}, the fitted values from
+\texttt{loglin} and \texttt{glm} are exceedingly 
+close. For \texttt{M1}, the largest discrepancy is about
+\Sexpr{round(max( abs( fit1 - M1$fit ) ),4)}, but this can be made smaller by
+tightening the IPF convergence criterion through the argument
+\texttt{eps}.
+<<"loglinExIb", echo=TRUE>>=
+M1 <- loglin( UCBAdmissions, margin=list( c(3,2), c(3,1), c(2,1) ),
+   fit=TRUE, eps=1e-06 ) 
+max( abs( fit1 - M1$fit ) )
+@
+The likelihood-ratio fit statistics from \texttt{loglin} match
+the deviance values from \texttt{glm}.
+<<"loglinExIc", echo=TRUE>>=
+M0$lrt
+M1$lrt
+M2$lrt
+@
+
+The IPF procedure used by \texttt{loglin} can also be called
+indirectly, through the \texttt{loglm} function in the package
+\texttt{MASS} \citep{venables2013modern}. With \texttt{loglm}, the
+data may be provided either as a contingency table or as a grouped
+data frame, and the model may be specified with a formula. For
+details, see \texttt{help(loglm, package=MASS)}.
+
+\subsection{Log-linear modeling with \texttt{cvam}}
+
+\subsubsection{Fitting a model with complete data}
+
+In the \texttt{cvam} package, log-linear models are fit by the
+function \texttt{cvam}. For conventional log-linear modeling with no missing
+or coarsened values, \texttt{cvam} works like \texttt{glm},
+but with a few notable differences. Like \texttt{glm}, the
+model is specified by a formula, and the data are supplied through a data
+frame. Unlike \texttt{glm}, the formula is one-sided, and the variable
+holding the frequencies is specified not in the formula but as an
+argument named \texttt{freq}. For example, here is how we would fit
+and compare our  three models for the U.C. Berkeley admissions data.
+<<"loglinExJ", echo=TRUE>>=
+library(cvam)
+dF <- as.data.frame(UCBAdmissions)
+M0 <- cvam( ~ Dept*Gender + Dept*Admit, data=dF, freq=Freq )
+M1 <- cvam( ~ Dept*Gender + Dept*Admit + Gender*Admit, data=dF, freq=Freq )
+M2 <- cvam( ~ Dept*Gender*Admit, data=dF, freq=Freq )
+anova(M0,M1,M2)
+@
+The results are equivalent to those from \texttt{glm}. One minor
+difference is that with \texttt{cvam}, the \texttt{anova} table
+reports $-2$ times the loglikelihood 
+value achieved under each model, whereas with \texttt{glm}, it reports a
+deviance statistic. The two measures differ by a constant that drops
+out whenever two models are compared.
+
+\subsubsection{Extracting information from a \texttt{cvam}
+object\label{sec:extracting}}
+
+The result from a call to \texttt{cvam} is a cvam object,
+a special kind of list that holds parameter estimates and other
+information from the model fit. To access this information, we
+recommend that you use
+\texttt{summary} or the various \texttt{get} functions supplied with
+the package. For example, the function \texttt{get.coef} returns the
+the vector of estimated coefficients $\hat{\bbeta}$. Calling
+\texttt{get.coef} with the
+argument \texttt{withSE=TRUE} produces a data frame with estimated
+coefficients, standard errors, t-statistics and p-values.
+<<"loglinExK", echo=TRUE>>=
+get.coef(M0, withSE=TRUE)
+@
+The function \texttt{get.fitted} extracts the fitted values in the form
+of cell probabilities, cell means, or log-cell means. By default, it
+returns a data frame with one row per cell. The variables in this data
+frame include all of the factors in the model, a variable named
+\texttt{freq} containing the frequencies, and a variable named
+\texttt{fit} containing the fitted values.
+<<"loglinExL", echo=TRUE>>=
+# display the fitted means for the first few cells
+head( get.fitted(M0, type="mean" ) )
+@
+The reason why \texttt{get.fitted} returns a data frame by default
+rather than a vector of fitted values is that, unlike \texttt{glm},
+\emph{the ordering of the cells in the model is determined by the internal
+workings of \texttt{cvam}, not by the rows of the data frame supplied
+to \texttt{cvam} through its \texttt{data} argument}. 
+This is an extremely important point, so let us say it again in a
+slightly different way: \emph{With \texttt{cvam}, the number of fitted
+values and the order in which they appear may not, and in most cases
+do not, correspond to the rows of the user-supplied data.} With
+\texttt{cvam}, the data
+frame supplied for model-fitting does not need to have one row
+per cell. The \texttt{cvam} function automatically aggregates the
+data, identifying the unique response patterns (i.e., the unique
+combinations of observed values for all factors in the model) and adds up
+the frequencies within these response patterns. It identifies cells
+that have no observations in them and assigns those cells frequencies
+of zero even if they are absent from the data frame.
+The \texttt{cvam} function also accepts microdata. If the
+argument \texttt{freq} is not given, then \texttt{cvam} assumes that
+the data frame contains microdata, and it assigns
+each row a frequency of one. For the Berkeley graduate
+admissions data, we get the same results whether we use the aggregated
+frequencies in \texttt{UCBAdmissions} or the microdata in
+\texttt{microUCBAdmissions}.
+<<"loglinExM", echo=TRUE>>=
+# refit M0 with microdata to see that results are the same
+M0 <- cvam( ~ Dept*Gender + Dept*Admit, data=microUCBAdmissions )
+get.coef(M0, withSE=TRUE)
+@
+
+\subsubsection{Getting Pearson residuals}
+
+The data frame returned by \texttt{get.fitted} is useful for model
+diagnostics. In the example below, we compute the Pearson residuals
+\begin{equation}
+\hat{r}_\bvsub \,=\, \frac{f_\bvsub-\hat{\mu}_\bvsub}{\sqrt{\hat{\mu}_\bvsub}}
+\label{eq:pearson}
+\end{equation}
+for all cells, plot them against the cell index, and use the \texttt{identify}
+function to interactively label the outliers. Labels for the
+identified points are created with the `\texttt{:}' operator, which combines
+multiple factors into a single factor. 
+<<"pearsonPlotFake", eval=FALSE, echo=TRUE>>=
+fit0 <- get.fitted(M0, type="mean")
+pearson <- ( fit0$freq - fit0$fit ) / sqrt( fit0$fit )
+labs <- as.character( fit0$Dept : fit0$Gender : fit0$Admit )
+plot( 1:NROW(fit0), pearson,
+   xlab="Cell index", ylab="Pearson residual" )
+identify( 1:NROW(fit0), pearson, labels=labs )
+@
+\begin{figure}
+\centering
+<<echo=FALSE, fig=TRUE>>=
+fit0 <- get.fitted(M0, type="mean")
+pearson <- ( fit0$freq - fit0$fit ) / sqrt( fit0$fit )
+labs <- as.character( fit0$Dept : fit0$Gender : fit0$Admit )
+plot( 1:NROW(fit0), pearson, xlab="Cell index", ylab="Pearson residual" )
+w <- 7
+text( w, pearson[w], labels=labs[w], pos=4 )
+w <- 19
+text( w, pearson[w], labels=labs[w], pos=2 )
+@
+\caption{\label{fig:pearson}Pearson residuals from model $\mbox{\texttt{M}}_0$
+plotted against cell number, with two outliers identified.}
+\end{figure}
+The resulting plot, which is shown in Figure \ref{fig:pearson},
+clearly reveals where this model does not fit; \texttt{Gender} and
+\texttt{Admit} are conditionally related in Department \texttt{"A"}.
+
+\subsubsection{Saturated and conditional models}
+
+By default, \texttt{cvam} fits a complete-data model by the same
+procedure as \texttt{glm}, using NR to maximize the 
+surrogate Poisson loglikelihood. If the model is saturated, an
+alternative procedure can be invoked by calling \texttt{cvam}
+with the argument \texttt{saturated=TRUE}. Under this option, the
+model matrix $\bX$ is never constructed, so the coefficients
+$\bbeta$ are undefined, and fitted values are
+obtained from the frequencies as $\hat{\bmu}=\hat{\mbox{\boldmath
+$f$}}$ and $\hat{\bpi}=N^{-1}\hat{\mbox{\boldmath $f$}}$. An
+advantage of using \texttt{saturated=TRUE} is that the computations
+are faster and require less memory, especially when the number of
+cells in the table is large. A disadvantage is that standard errors
+will not be reported. If you need standard errors, you can fit the
+same model with \texttt{saturated=FALSE}.
+
+Fitting a saturated model allows you to compute a deviance
+statistic. Deviance is defined
+as $-2$ times the difference between the loglikelihood achieved under
+the model of interest and the loglikelihood achieved under the
+saturated model. The loglikelihood for any model can be obtained with
+\texttt{get.loglik}.
+<<"loglinExN", echo=TRUE>>=
+# compute the deviance for model M0
+M0 <- cvam( ~ Dept*Gender + Dept*Admit, data=dF, freq=Freq )
+M2 <- cvam( ~ Dept*Gender*Admit, data=dF, freq=Freq, saturated=TRUE )
+dev.M0 <- -2 * ( get.loglik(M0) - get.loglik(M2) )
+dev.M0
+@
+
+With \texttt{cvam}, you can also fit log-linear models that regard
+some variables as 
+fixed. With the Berkeley admissions data, it is natural to
+examine the conditional distribution of \texttt{Admit} given
+\texttt{Dept} and \texttt{Gender}. The model of homogeneous association
+\[
+\texttt{$\sim$ Dept*Gender + Dept*Admit + Gender*Admit}
+\]
+implies a logistic model for \texttt{Admit} with main effects for 
+\texttt{Dept} and \texttt{Gender}. To fit a conditional model, use the
+same model formula as for the joint model, but include the 
+symbol `\texttt{|}' followed by the variables to be conditioned on,
+separating them with `\texttt{+}'.
+<<"loglinExO", echo=TRUE>>=
+# fit M1 as a conditional model
+M1 <- cvam( ~ Dept*Gender + Dept*Admit + Gender*Admit | Dept + Gender,
+   data=dF, freq=Freq )
+@
+Coefficients and standard errors from a conditional model are
+identical to those from the joint model, because the parameters are
+estimated under the same surrogate Poisson regression. The only major
+difference is that, for a conditional model,  fitted probabilities
+from \texttt{get.fitted} will 
+be scaled to sum to one within every combination of levels for the
+variables treated as fixed.
+<<"loglinExP", echo=TRUE>>=
+# show the first few fitted probabilities
+head( get.fitted(M1, type="prob") )
+@
+Conditional models are consistent with product-multinomial sampling,
+which is described in \ref{app:sampling}. Under a product-multinomial
+scheme, the surrogate Poisson regression gives correct results only if
+the requested model (the part of the formula on the left-hand side of
+`\texttt{|}') includes all possible associations among the variables
+that are held fixed \citep{venables2013modern}. If the requested model
+omits any of these associations, the call to \texttt{cvam} produces an
+error.
+
+\section{Examples with missing and coarsened data}
+
+\subsection{A {\boldmath $2\times 2$} table with missing data\label{sec:2x2}}
+
+Thus far, we have shown that \texttt{cvam} gives results 
+equivalent to those from \texttt{glm} and \texttt{loglin} when the
+data are are complete. The main advantage in using \texttt{cvam} is
+that it allows us to make full use of all the available data when some
+information is missing. 
+
+The \texttt{crime} dataset, previously analyzed by
+\cite{kadane1985victimization} and \cite{schafer1997analysis}, came
+from the National Crime Survey conducted by the U.S. Census Bureau.
+Occupants of housing units were interviewed to determine whether they
+had been victimized by crime in the preceding six-month period. Six
+months later, the same units were visited again to determine whether
+the occupants had been victimized during the intervening
+months. Missing values for various reasons occurred at both occasions.
+Variables \texttt{V1} and \texttt{V2} are factors indicating whether
+victimization was reported at occasion 1 and occasion 2, and
+\texttt{n} is the frequency.
+<<"crimeA", echo=TRUE>>=
+data(crime)   # load the crime dataset distributed with cvam
+crime
+sum(crime$n)
+@
+If we try to explore the joint distribution of \texttt{V1} and
+\texttt{V2}, we encounter a problem.  Conventional methods expect that
+each observation has been unambiguously assigned to a single
+cell of the $2\times 2$ table indexed by
+\[
+\bv\,\in\,\left\{\,(1,1),\,(2,1),\,(1,2),\,(2,2)\,\right\}.
+\]
+Conceptually, each household represented in this dataset does
+have a true victimization status 
+for each time period and thus belongs to a single cell. The difficulty is
+that cell membership is fully known only 
+for the $561$ households with
+non-missing values for both time periods. 
+For the 31 households with
+\texttt{V1=NA} and \texttt{V2="no"}, we know that a portion
+fall into cell $(1,1)$ and a portion fall into cell $(2,1)$, but we do
+not know what those portions are. Similarly, the 33 households with 
+\texttt{V1="no"} and \texttt{V2=NA} are divided between cell
+$(1,1)$ and $(2,1)$, but we do not know how to divide them. 
+It may be reasonable to discard the 115 households with \texttt{V1=NA}
+and \texttt{V2=NA}, as they appear to be noninformative.
+But the other households do provide partial information that may be
+useful for assessing the joint distribution of \texttt{V1} and \texttt{V2}.
+
+If we had to analyze this dataset with conventional software, we would
+be forced to choose between  
+\begin{itemize}
+\item analyzing the $2\times 2$ table with only the 561 complete
+cases, producing answers that are inefficient and possibly biased,
+or
+\item using all 756 cases, but treating \texttt{NA} as an additional level,
+leading to a $3\times 3$ table that is difficult to interpret.
+\end{itemize}
+With \texttt{cvam}, however, we just specify a model that we would
+use if no data were missing, supply the incomplete data, and 
+fit the model.
+<<"crimeB", echo=TRUE>>=
+# fit the model of independence
+M0 <- cvam( ~ V1 + V2, freq=n, data=crime )
+# fit the model of non-independence
+M1 <- cvam( ~ V1 * V2, freq=n, data=crime )
+# compare them
+anova(M0,M1, pval=TRUE)
+@
+The large improvement of fit when moving from the first model to the
+second provides strong evidence that \texttt{V1} and \texttt{V2} are
+related. 
+
+To understand what \texttt{cvam} did, let's examine the results from
+the independence model using \texttt{summary}.
+<<"crimeC", echo=TRUE>>=
+summary(M0)
+@
+By default, \texttt{cvam} computes ML estimates by an EM
+algorithm. This procedure has NR embedded within
+it and reduces to NR when there are no missing or coarsened values.
+The standard errors displayed in the table of coefficients account for
+the uncertainty due to missing or coarsened values. The EM algorithm and
+standard-error computations are described in \ref{app:EM} and
+\ref{app:SE}.
+
+\subsection{Fitted values, predicted true
+frequencies, and residuals\label{sec:Pearson}}
+
+Another interesting result is seen in the data frame that contains the
+fitted values. 
+<<"crimeD", echo=TRUE>>=
+dF <- get.fitted(M0, type="mean")
+dF
+@
+The variable \texttt{fit} holds the estimated cell means
+$\hat{\bmu}$. Because this model assumes independence, the odds ratio
+among these fitted values is exactly one.
+<<"crimeE", echo=TRUE>>=
+( dF$fit[1] * dF$fit[4] ) / ( dF$fit[2] * dF$fit[3] )
+@
+The variable \texttt{freq} holds the predicted true frequencies, a
+vector that we will call $\hat{\mbox{\boldmath $f$}}$, and the odds
+ratio among these values is not one. 
+<<"crimeF", echo=TRUE>>=
+( dF$freq[1] * dF$freq[4] ) / ( dF$freq[2] * dF$freq[3] )
+@
+The vector $\hat{\mbox{\boldmath $f$}}$ is called the
+\emph{predicted true frequencies}. It represents our best guess as
+to how the 756 cases in the \texttt{crime} dataset should be
+apportioned to the cells of the $2\times 2$ table, assuming that the
+model is correct. If there were no missing values, then the cell
+membership of each case would be known; in that case, no prediction
+would be needed, and
+$\hat{\mbox{\boldmath $f$}}$ would be identical to $\mbox{\boldmath
+$f$}$ regardless of the model. When some of the data are missing,
+$\hat{\mbox{\boldmath $f$}}$ combines the observed data with 
+parameter estimates from EM to predict the unknown elements of
+$\mbox{\boldmath $f$}$. From the results of the LR test, we know that
+this model does not fit. The apportionment of incomplete cases in
+$\hat{\mbox{\boldmath $f$}}$ is based on the implausible assumption of
+independence, so residuals that compare $\hat{\mbox{\boldmath $f$}}$
+to $\hat{\bu}$ are likely to understate the lack of fit.
+
+A better strategy for assessing fit is to use quasi-Pearson residuals,
+which we define as
+\begin{equation}
+\tilde{r}_\bvsub \,=\,
+\frac{\hat{f}^{(sat)}_\bvsub - \hat{\mu}_\bvsub}{\sqrt{\hat{\mu}_\bvsub}},
+\label{eq:quasiPearson}
+\end{equation}
+where $\hat{f}^{(sat)}_\bvsub$ is the predicted true frequency under a
+saturated model, and $\hat{\mu}_\bvsub$ is the estimated cell mean under
+the current model. With no missing data, the quasi-Pearson residuals 
+are equal to the Pearson residuals from Equation
+(\ref{eq:pearson}). With missing data, the quasi-Pearson residuals
+behave differently from Pearson residuals, with distributional
+properties that depend on the rates of missingness and the unmodeled 
+missingness mechanism. Nevertheless, they can help to reveal areas
+of the table where a model does not fit, and they reduce to zero for
+all cells when the model is saturated.
+
+To compute quasi-Pearson residuals, you need to fit two models: the
+model of interest, which provides the fitted cell means, and the saturated
+model, which provides the predicted true frequencies.  Keep in mind
+that these two vectors may order their 
+observations differently. As we emphasized in Section
+\ref{sec:extracting}, the ordering 
+of cells in a \texttt{cvam} model is defined
+by \texttt{cvam}, and is not directly controlled by the
+user. More precisely, the cell ordering is determined by the order in
+which variables appear in the model formula. To check whether
+$\hat{\bmu}$ and  $\hat{\mbox{\boldmath $f$}}^{(sat)}$ have the same
+ordering, you should examine the frames returned by
+\texttt{get.fitted} for both models and make sure that the factors
+appear in the same columns. If not, you will need to revise one of the
+model formulas so that the variables appear in the
+same order as in the other formula, and then re-fit the model whose
+formula was revised.
+<<"crimeG", echo=TRUE>>=
+# examine the frames from get.fitted for M0 and M1
+# to make sure that they use the same cell ordering
+get.fitted(M0)
+get.fitted(M1)
+# compute the quasi-Pearson residuals
+muHat <- get.fitted(M0, type="mean")$fit
+fHatSat <- get.fitted(M1, type="mean")$freq
+quasiPearson <- ( fHatSat - muHat ) / sqrt( muHat )
+quasiPearson
+@
+Examining these residuals, we see that the independence model
+underpredicts membership in cells $(1,1)$ and $(2,2)$ and overpredicts
+membership in $(1,2)$ and $(2,1)$.
+
+\subsection{One variable with coarsened values}
+
+In the companion vignette \textit{Understanding Coarsened Factors in
+\texttt{cvam}}, we described our extension to R's factor mechanism
+to store categorical variables with coarsened values. Using the
+\texttt{abortion2000} dataset distributed with \texttt{cvam}, we 
+created a coarsened factor based on race and Hispanic origin. The code
+for creating this factor is reproduced below.
+<<"raceHispA", echo=TRUE>>=
+data(abortion2000)
+CenRace <- addNA(abortion2000$CenRace)
+Hisp <- addNA(abortion2000$Hisp)
+RH <- Hisp:CenRace
+RH <- droplevels(RH)
+levels(RH) <- list(
+   nonHispWhite = "nonHisp:White",
+   nonHispBlack = "nonHisp:Black",
+   nonHispOther = "nonHisp:Other",
+   Hisp = c("Hisp:White", "Hisp:Black", "Hisp:Hisp", "Hisp:Other", "Hisp:NA"),
+   nonHispNA = "nonHisp:NA",
+   NAWhite = "NA:White" )
+RH  <- coarsened( RH, levelsList = list(
+   nonHispNA = c("nonHispWhite", "nonHispBlack", "nonHispOther"), 
+   NAWhite = c("nonHispWhite", "Hisp" ) ) )
+summary(RH)
+@
+This coarsened factor has four base levels, which represent
+categories with no missing information. 
+<<"raceHispB", echo=TRUE>>=
+baseLevels(RH)
+@
+The other three levels, which we call coarse levels, represent
+groupings of the base levels. Relationships between the coarse and
+base levels are shown by the mapping matrix.
+<<"raceHispC", echo=TRUE>>=
+coarseLevels(RH)
+mapping(RH)
+@
+To estimate the proportions of the population that fall into the four
+base levels, we use the \texttt{cvam} function to fit a one-variable model.
+<<"raceHispD", echo=TRUE>>=
+result <- cvam( ~ RH )
+summary(result, showCoef=FALSE)
+# display the fitted proportions
+get.fitted(result)
+@
+
+\subsection{Mixing complete, incomplete, and coarsened
+variables\label{sec:AbAny}}
+
+A variable in a \texttt{cvam} modeling formula may be an ordinary
+factor with complete data, an ordinary factor with missing values, or
+a coarsened factor created by the function \texttt{coarsened}. It
+may even be a latent class, a categorical variable whose values are
+entirely missing. Latent-class models will be discussed in Section
+\ref{sec:latent}. 
+
+The \texttt{abortion2000} dataset is a frame of microdata with 2,817
+records extracted from the General Social Survey (GSS)
+\citep{smith2019general}. For illustration, we will fit a model with
+four variables from this dataset.
+\begin{itemize}
+\item \texttt{Sex}, a factor with levels \texttt{"Female"} and
+\texttt{"Male"} and no missing values;
+\item \texttt{RH}, the coarsened factor that we created from
+\texttt{CenRace} and \texttt{Hisp};
+\item \texttt{PolViews}, a factor that represents the respondent's
+self-described political orientation, with levels \texttt{"Con"} (Conservative),
+\texttt{"Mod"} (Moderate), and \texttt{"Lib"} (Liberal), and $173$
+missing values; and
+\item \texttt{AbAny}, whether the respondent thinks it should be
+possible for a woman to obtain a legal abortion if the woman wants it
+for any reason, with levels \texttt{"Yes"}, \texttt{"No"},
+\texttt{"DK"} (don't know) and 962 missing values.
+\end{itemize}
+
+To begin, we place these four variables in a data frame of their
+own. This step is not required; we do this only to keep our
+visual displays tidy.
+<<"AbAnyA", echo=TRUE>>=
+# copy the four variables into a data frame
+dF <- data.frame( Sex = abortion2000$Sex, RH = RH,
+   PolViews = abortion2000$PolViews, AbAny = abortion2000$AbAny )
+# display the first few rows
+head(dF)
+@
+Next, we create a formula to specify the model that we want to
+fit. Thinking of \texttt{AbAny} as a response and the other three
+variables as potential predictors, one model worth considering is
+<<"AbAnyB", echo=TRUE>>=
+myFormula <- ~ Sex*RH*PolViews + AbAny*Sex + AbAny*RH + AbAny*PolViews
+@
+which implies a multinomial logistic regression for \texttt{AbAny}
+with main effects for \texttt{Sex}, \texttt{RH}, and
+\texttt{PolViews}. If we tried to fit this logistic model directly, any
+record that has a missing or coarsened value for any of the three
+predictors would be dropped. By embedding this logistic regression
+into a log-linear model and calling \texttt{cvam},
+we can fit the joint model to all the records.
+
+Let's fit this model and compare it to the saturated model in two
+different ways: with an LR test, and by Akaike's information
+criterion (AIC). The latter is obtained by calling \texttt{anova} with
+the argument \texttt{method="AIC"}.
+<<"AbAnyC", echo=TRUE>>=
+myMod <- cvam( myFormula, data=dF )
+satMod <- cvam( ~ Sex*RH*PolViews*AbAny, data=dF, saturated=TRUE )
+anova( myMod, satMod, pval=TRUE )
+anova( myMod, satMod, method="AIC" )
+# compute and summarize the fitted values
+muHat <- get.fitted(myMod, type="mean")$fit
+summary( muHat )
+@
+The LR comparison reveals some lack of fit. The p-value is not especially
+accurate, because many of the fitted values are small. AIC favors the
+smaller model. We can also test the significance of each of the three
+predictors by omitting their associations with \texttt{AbAny}, one a
+time, and performing the LR tests against the current model.
+<<"AbAnyD", echo=TRUE>>=
+noSex <- cvam( ~ Sex*RH*PolViews + AbAny*RH + AbAny*PolViews, data=dF)
+anova( noSex, myMod, pval=TRUE )
+noRH  <- cvam( ~ Sex*RH*PolViews + AbAny*Sex + AbAny*PolViews, data=dF)
+anova( noRH, myMod, pval=TRUE )
+noPol <- cvam( ~ Sex*RH*PolViews + AbAny*Sex + AbAny*RH, data=dF)
+anova( noPol, myMod, pval=TRUE )
+@
+Both \texttt{RH} and \texttt{PolViews} are strong predictors of
+\texttt{AbAny}, but \texttt{Sex} is clearly not.
+
+\subsection{Control parameters}
+
+Many aspects of the behavior of \texttt{cvam} are determined by
+control paramaters, the internal settings for determining whether EM
+has converged, for deciding how many iterations to take before
+stopping, and so on. Control parameters, which should not be confused
+with model parameters, may be changed through the optional argument
+\texttt{control}. This argument should be a named
+list. That list is processed by another function,
+\texttt{cvamControl}, which sets the control parameters to the
+user-supplied values and applies default values to any that were not
+supplied. Typing
+<<"cvamControlA", echo=TRUE, eval=FALSE>>=
+cvamControl()
+@
+will display the names and default values for all
+control parameters. For example, the control parameter that judges
+proximity to a boundary is called \texttt{critBoundary}, and its
+default value \texttt{1e-08} means that the estimates are considered
+to be at or near a boundary if the fitted probability for any cell is
+zero when rounded to eight decimal places. To change
+\texttt{critBoundary} to something else, put the desired value into a
+named list and supply it to \texttt{cvam}.
+<<"cvamControlB", echo=TRUE>>=
+# use a boundary criterion that is less strict
+satMod <- cvam( ~ Sex*RH*PolViews*AbAny, data=dF, saturated=TRUE,
+   control=list(critBoundary=1e+06 ) )
+@
+By extracting and rounding the fitted
+probabilities, we can see exactly which cells have estimates close to
+zero.
+<<"cvamControlC", echo=TRUE>>=
+round( get.fitted(satMod, type="prob")$fit, 6)
+@
+
+\subsection{Flattening constants and prior information\label{sec:flatten}}
+
+Estimates near a boundary may cause a variety of problems. If the
+model is fit using \texttt{saturated=FALSE}, then, depending on the
+complexity of the model, some of the estimated coefficients might
+run away toward $\pm\infty$. Standard errors computed by \texttt{cvam}
+assume that the loglikelihood function is concave and approximately
+quadratic in the vicinity of the ML solution; this may not be the case
+if the solution lies near a boundary, making the reported standard
+errors unreliable or causing the procedure to fail. Boundary estimates
+can also make it difficult to compare models by hypothesis
+tests. Rules for counting degrees of freedom in boundary solutions are
+difficult to implement, and many software packages give incorrect
+results \citep{bishop1975discrete, clogg1991multiple}. The situation
+becomes even harder when missing data are involved
+\citep{fuchs1982maximum, little2002statistical}.
+
+To address this problem, \texttt{cvam} allows you to introduce a
+flattening constant, a small, positive number
+that is added to each cell of the complete-data table during
+the fitting procedure. Flattening constants are helpful in sparse,
+high-dimensional tables where many cells have no observations in them.
+From a Bayesian standpoint, they can be viewed as a certain kind of
+prior distribution called a data-augmentation prior (DAP)
+\citep{bedrick1996new}. Using a DAP is functionally equivalent to
+adding fictitious observations to a dataset that
+look like frequencies but are not necessarily
+integers. DAPs are convenient when comparing the fit of alternative models,
+because the same prior can be applied to any model regardless of how
+the parameters are defined.  From a non-Bayesian perspective, a
+flattening constant can be regarded as adding a penalty function that
+penalizes the fit of estimates near the boundary.  The effect of a
+flattening constant is to smooth the estimate of $\bpi$ and $\bmu$
+toward a uniform table, one in which all cells have equal
+probability, and to rein in the elements of $\bbeta$ to keep them from
+running away. If the flattening constant is small, the effect on
+parameter estimates is barely noticeable, but the computations for
+saturated and non-saturated models are effectively stabilized.
+
+To apply a flattening constant, use the \texttt{prior} argument to
+\texttt{cvam}.  This argument must be a prior distribution created by
+the function \texttt{cvamPrior}.  For example,
+<<"priorA", echo=TRUE>>=
+myPrior <- cvamPrior( flatten=7.2 )
+@
+introduces information equivalent to $7.2$ prior observations,
+distributed equally across the cells of the complete-data
+table. There are $72$ cells in the current example, so each cell
+receives a prior count of $0.1$.
+<<"priorB", echo=TRUE>>=
+# re-fit and compare models using the flattening constant
+myMod <- cvam( myFormula, data=dF, prior=myPrior )
+satMod <- cvam( ~ Sex*RH*PolViews*AbAny, data=dF,
+   saturated=TRUE, prior=myPrior )
+@
+With prior information, the function being maximized is not the
+loglikelihood, but an objective function called $\log P$
+described in \ref{app:logP}. The solution is no longer an ML estimate, but a
+penalized ML estimate or posterior mode. When comparing 
+the fit of alternative models, we recommend that you use the same
+prior for every model. We also suggest that you test hypotheses not by
+an LR test but by comparing values of $-2\log P$, which 
+can be done by calling \texttt{anova} with the argument
+\texttt{method="logP"}.
+<<"priorC", echo=TRUE>>=
+anova( myMod, satMod, pval=TRUE, method="logP")
+@
+
+With \texttt{cvamPrior}, you can also introduce more targeted prior
+information that applies prior frequencies to 
+subsets of cells in the complete-data table. These frequencies are
+called nuggets. They resemble coarsened data, and  we provide them to
+\texttt{cvamPrior} as a list. Prior nuggets should be used sparingly,
+but can be very helpful for certain types of models, especially
+those involving latent classes, which we discuss in Section
+\ref{sec:latent}. 
+
+\subsection{Running \texttt{cvam} on a \texttt{cvam}
+object\label{sec:cvamOnCvam}}
+
+Thus far, we have called the \texttt{cvam} function
+by supplying a model formula as its first argument. We may also call
+\texttt{cvam} with the first argument being a \texttt{cvam}
+object. Loosely speaking, running \texttt{cvam} on a \texttt{cvam}
+object means, ``Carry on; do more of the same, unless I specifically
+tell you otherwise.'' For example, if the \texttt{cvam} object
+holds the results from an EM run, running \texttt{cvam} on that object will
+restart EM from where it stopped.
+<<"cvamOnCvam", echo=TRUE>>=
+# fit the saturated model to the crime data
+result <- cvam( ~ V1 * V2, data=crime, freq=n)
+# run it again, starting from the previous result
+result <- cvam(result)
+summary(result, showCoef=FALSE)
+@
+In this example, when \texttt{cvam} was called the second time, EM
+started to run again, but stopped after just one iteration because it
+had already converged.
+
+Running \texttt{cvam} on a \texttt{cvam} object is helpful in
+problems with high rates 
+of missing information, which causes EM to converge slowly. By
+default, \texttt{cvam} stops if EM has not converged by 
+$500$ cycles. That limit is set by the control parameter
+\texttt{iterMaxEM}. If EM fails to converge, we could increase that
+limit and start over, hoping that it will converge by the new
+limit. A better option is to continue the EM run from where it
+stopped, using the final parameter values from the first run as the
+starting values for the next run.
+
+Running \texttt{cvam} on a \texttt{cvam} object is also helpful for
+Markov chain Monte Carlo (MCMC), which is discussed in Section
+\ref{sec:MCMC}. Results from EM can be good starting values for
+MCMC, as can the results from another MCMC run. Simulated values from
+MCMC can also serve as random starting values for EM, which can help
+us to detect multiple modes.
+
+\section{Estimates, predictions, imputations, and likelihoods}
+
+\subsection{Estimated marginal and conditional probabilities}
+
+Coefficients of a log-linear model can be difficult to interpret and
+depend on how the $\bX$ matrix is coded. For those who are brave
+enough to try, the model matrix used in a \texttt{cvam} fit can be
+examined using \texttt{get.modelMatrix}.  However, many analysts
+prefer to work with probabilities, and after fitting a \texttt{cvam}
+model, you can request a wide variety of estimated marginal 
+and conditional probabilities with the function \texttt{cvamEstimate}.
+
+This function has two required arguments. The first is a one-sided
+formula that specifies the desired probabilities, and the second is a
+\texttt{cvam} object containing the results from a model fit. In the
+example below, we request the estimated probabilities for the $2\times
+3$ marginal table that classifies persons by \texttt{Sex} and
+\texttt{AbAny}.
+<<"AbAnyF", echo=TRUE>>=
+cvamEstimate( ~ Sex + AbAny, myMod )
+@
+The factors in the formula are separated by `\texttt{+}', which
+does not imply any kind of additive structure, but merely signals that
+we are adding more dimensions to the table of requested
+probabilities. The result of a call to 
+\texttt{cvamEstimate} is a data frame with estimated
+probabilities and standard errors. The latter are computed by the
+delta method, a first-order Taylor approximation based on the
+estimated covariance matrix for $\hat{\bbeta}$, as described in
+\ref{app:estSE}. A symmetric confidence interval for
+a probability based on a normal approximation may work poorly,
+especially when the estimate lies
+close to zero or one; the endpoints may even stray
+outside the parameter space. The data
+frame from \texttt{cvamEstimate} also 
+gives lower and upper limits for approximate confidence intervals
+based on a logistic transformation. These alternative intervals are
+asymmetric, and the limits stay between 0 and 1. 
+By default, the level of confidence is 95\%, but this can be changed
+through the \texttt{confidence} argument.
+
+For this example, it seems more natural to examine the
+conditional probabilities for \texttt{AbAny} given \texttt{Sex}.
+To ask for conditional probabilities, put
+the symbol `\texttt{|}' into the formula.
+<<"AbAnyG", echo=TRUE>>=
+# estimated conditional probabilities for AbAny given Sex
+cvamEstimate( ~ AbAny | Sex, myMod )
+@
+To condition on two or more variables, put them after `\texttt{|}' and
+separate them with `\texttt{+}'. Conditional probabilities
+may be easier to understand when displayed as a
+flat table.
+<<"AbAnyH", echo=TRUE>>=
+# conditional probabilities for AbAny given RH and PolViews
+est <- cvamEstimate( ~ AbAny | RH + PolViews, myMod ) 
+
+# reshape the probabilities into a three-dimensional array
+xtab <- xtabs( prob ~ AbAny + RH + PolViews, data = est )
+
+# display the array as a flat table
+ftable( xtab, row.vars=c("PolViews", "RH"), col.vars="AbAny" )
+@
+
+\subsection{Prediction}
+
+Predictions from a fitted model are computed by the function
+\texttt{cvamPredict}. In \texttt{cvam}, prediction has a
+different meaning from the way it is used in regression analysis.
+In regression, prediction is to
+compute the estimated mean response at specific values for the
+covariates. In \texttt{cvam}, prediction is to compute the
+predictive distribution for one or more variables, given specific
+values for the possibly incomplete and coarsened data. Let
+\begin{itemize}
+\item $\bV_i=(V_{i1},\ldots,V_{ij})$ denote the vector of true (uncoarsened)
+variables for observational unit $i$, with possible value
+$\bv=(v_1,\ldots,v_J)$; let
+\item $\bA_i$ denote a subset of these variables, with possible value
+$\ba$; and let
+\item $\bV^*_i=(V^*_{i1},\ldots,V^*_{iJ})$ denote the coarsened
+version of $\bV_i$.
+\end{itemize}
+When calling \texttt{cvamPredict}, you supply a one-sided
+formula that specifies the variables to be predicted (the variables in
+$\bA_i$) and a \texttt{cvam} object that contains a fitted
+model. You must also supply a prediction frame, 
+a data frame whose rows are the $\bV^*_i$'s for which
+predictions are desired. The prediction frame is not necessarily the 
+dataset that was used to fit the model. The result from
+\texttt{cvamPredict} is the set of probabilities
+$P(\bA_i=\ba \,|\, \bV^*_i, \bmu=\hat{\bmu} )$
+for all possible $\ba$, where $\hat{\bmu}$ is the set of estimated
+parameters from the fitted model. These probabilities are returned as
+a matrix with the same number of rows as the prediction frame,
+and one column for each of the possible $\ba$. Each row of the result
+sums to one.
+
+To see how this works, recall the \texttt{crime}
+dataset introduced in Section \ref{sec:2x2}. In the code below, we fit the
+non-independence model and generate predictions for \texttt{V1} using
+\texttt{crime} as the prediction frame.
+<<"predictA", echo=TRUE>>=
+# display the crime data
+crime
+# fit the model of non-independence
+fit <- cvam( ~ V1 * V2, data=crime, freq=n )
+# display predictions for V1
+cvamPredict( ~ V1, fit, data=crime )
+@
+In the first row of the result, the predicted
+probabilities of \texttt{V1="no"} and \texttt{"yes"} are
+\texttt{1.0000000} and \texttt{0.0000000}, because the first row of
+\texttt{crime} has \texttt{V1} observed to be \texttt{"no"}. In the
+second row of the result, 
+the predicted probabilities are \texttt{0.0000000} and
+\texttt{1.0000000}, because the second row of \texttt{crime} has
+\texttt{V1} observed to be \texttt{"yes"} In the third row of the result, the
+predicted probabilities are 
+\texttt{0.8369768} and \texttt{0.1630232}. Notice that that third row
+of \texttt{crime} has \texttt{V1=NA} and \texttt{V2="no"}. To predict
+\texttt{V1} for that row, \texttt{cvamPredict} takes the estimated
+parameters from the fitted model and computes from them the
+conditional probabilities for \texttt{V1="no"} and \texttt{V1="yes"}
+given \texttt{V1=NA} and \texttt{V2="no"}.
+
+By default, \texttt{cvamPredict} interprets the prediction frame
+as microdata. If frequencies are present, these can be supplied
+through the argument \texttt{freq}. In that case, \texttt{cvamPredict}
+returns a matrix of frequencies, with each row of the result summing
+to the corresponding frequency in the prediction frame.
+<<"predictB", echo=TRUE>>=
+# display predicted frequencies for V1
+cvamPredict( ~ V1, fit, data=crime, freq=n )
+@
+If the \texttt{cvamPredict} formula has more than one variable, the
+result will have one column for each possible combination of those variables.
+<<"predictC", echo=TRUE>>=
+# display predicted frequencies for V1 and V2
+cvamPredict( ~ V1 + V2, fit, data=crime, freq=n )
+@
+Variables in the formula should be separated by `\texttt{+}'. The
+conditioning symbol `\texttt{|}' should not appear in the formula,
+because \texttt{cvamPredict} automatically conditions on all data
+supplied in the prediction frame. As variables are added to the
+formula, the output from \texttt{cvamPredict} becomes wider and more
+unwieldly. An alternative to prediction that avoids this problem is
+imputation. 
+
+\subsection{Imputation}
+
+The function \texttt{cvamImpute} generates random imputations for all
+variables in a \texttt{cvam} model. When calling this function, the
+user supplies a \texttt{cvam} object containing a fitted model, and an
+imputation frame containing possibly incomplete or coarsened data. For
+each row $\bV^*_i$ of the imputation frame, the true variables $\bV_i$
+are drawn from their joint predictive distribution 
+$P(\bV_i\,|\, \bV^*_i, \bmu=\hat{\bmu} )$,
+where $\hat{\bmu}$ is the set of estimated parameters from the fitted
+model. If the imputation frame has frequencies, these should be
+declared through the argument \texttt{freq}. No formula is needed,
+because \texttt{cvamImpute} automatically imputes all variables in the
+model given all the information in the imputation frame.
+
+The \texttt{cvamImpute} uses R's internal random number generators.
+To make your results reproducible, set the random generator seeds
+beforehand using
+\texttt{set.seed}. 
+<<"imputeA", echo=TRUE>>=
+set.seed(69852)
+cvamImpute( fit, data=crime )
+@
+In this example, we did not supply frequencies, so
+\texttt{cvamImpute} interpreted the imputation frame as microdata and
+returned a dataset with one row for every row of \texttt{crime}. If you
+supply frequencies, the result will have one
+row for every cell of the complete-data table and a variable named
+\texttt{freq} that holds the imputed frequencies.
+<<"imputeB", echo=TRUE>>=
+cvamImpute( fit, data=crime, freq=n )
+@
+By repeatedly calling \texttt{cvamImpute} with the same imputation
+frame,  you can generate multiple 
+versions of the true data, any of which is plausible under the fitted
+model. If these repeated calls use the same \texttt{cvam} object, however, then
+they will not be multiple imputations in the sense defined by
+\cite{rubin1987multiple}, because they will have all been generated
+under the same set of estimated parameters $\hat{\bmu}$. Proper
+multiple imputations must reflect uncertainty in model parameters
+along with uncertainty due to missing and coarsened
+values. Imputations that reflect parameter uncertainty can be
+generated by Markov chain Monte Carlo, which we will discuss in
+Section \ref{sec:MCMC}.
+
+\subsection{Likelihood values}
+
+The function \texttt{cvamLik} computes likelihood values for
+rows of a user-supplied data under a fitted model. These should not be
+confused with the value of the overall loglikelihood function achieved
+by the model provided by \texttt{get.loglik}. Let 
+$\bV^*_i$ denote coarsened data for a single observational unit $i$,
+and let $\bV_i$ denote the underlying true data for tht unit. Let
+$\bA^*_i$ denote 
+a subset of the variables in $\bV^*_i$ for which the likelihood is
+desired, and let $\bB_i$ denote a subset of the variables in $\bV_i$ to be
+condition on and treated as fixed. Variables in $\bA^*_i$ and $\bB_i$
+must not overlap. The likelihood computed by \texttt{cvamLik} is
+\begin{equation}
+L(\bA^*_i=\ba^* \,|\,\bB_i=\bb, \bmu=\hat{\bmu})
+\,\propto\,
+P(\bA^*_i=\ba^* \,|\,\bB_i=\bb, \bmu=\hat{\bmu}),
+\label{eq:cvamLik}
+\end{equation}
+where $\ba^*$ and $\bb$ are the specific values for $\bA^*_i$ and
+$\bB_i$ seen in a row of the user-supplied data frame, and
+$\hat{\bmu}$ are estimated parameters in a \texttt{cvam} object. The
+likelihoods are computed as though they were probabilities, by summing
+the conditional probabilities $P(\bA_i\,|\, \bB_i=\bb,
+\bmu=\hat{\bmu})$ over all possible values of the true variables $\bA_i$ that
+are consistent with $\bA^*_i=\ba^*$. They are not 
+probabilities,  however, because \texttt{cvam} does not model the
+coarsened-data mechanism but regards it as ignorable. The probability
+of $\bA^*_i=\ba^*$ depends on the unmodeled mechanism and differs from
+the likelihood by an unknown multiplicative constant.
+Likelihoods from \texttt{cvamLik} are useful for computing the odds of
+observing  $\bA^*_i=\ba^*$ under alternative and 
+possibly counterfactual versions of $\bb$, because unknown
+proportionality constants cancel out in the the ratios.
+Arguments to \texttt{cvamLik} include
+\begin{itemize}
+\item a one-sided formula that specifies the variables in $\bA^*_i$
+and the variables in $\bB_i$, with the two groups of variables separated by
+`\texttt{|}', and variables within each group separated by
+`\texttt{+}'; 
+\item a \texttt{cvam} object from a fitted model to provide parameter
+estimates; and  
+\item a data frame whose rows contain the specific values
+$\bA^*_i=\ba^*$ and $\bB_i=\bb$ for computing the likelihoods.
+\end{itemize}
+The result is a data frame identical to the one supplied by the user,
+with an additional numeric variable \texttt{likVal} holding the
+likelihood values.
+
+\section{Bayesian methods and Markov chain Monte
+Carlo\label{sec:MCMC}}
+
+\subsection{Simulating draws from an approximate posterior
+distribution\label{sec:approxBayes}}
+
+When the number of sampled observations $N$ is large relative to the
+number of parameters being estimated, the difference between the
+estimated coefficients $\hat{\bbeta}$ from EM and the true
+coefficients $\bbeta$ is approximately normally distributed with a
+covariance matrix $\hat{V}(\hat{\bbeta})$. From a Bayesian
+perspective, we can treat $N(\hat{\bbeta}, \hat{V}(\hat{\bbeta})\,)$
+as an approximate posterior distribution for $\bbeta$ given the data
+used to fit the model. By simulating random draws of $\bbeta$ from this
+distribution, we can perform approximate Bayesian inference for any
+parameter that can be expressed as a function of $\bbeta$ or $\bpi$. 
+
+To simulate random draws from this approximate posterior distribution,
+apply the \texttt{cvam} function to a \texttt{cvam} object as
+described in Section \ref{sec:cvamOnCvam}, with the additional argument
+\texttt{method="approxBayes"}. The \texttt{cvam} object must hold
+the results from an EM run, otherwise the software won't have access
+to $\hat{\bbeta}$ or $\hat{V}(\hat{\bbeta})$. The simulation uses R's
+internal random number generators. To make your results reproducible,
+set the random generator seeds beforehand with \texttt{set.seed}.
+<<"approxBayesA", echo=TRUE>>=
+# fit the non-independence model to the crime data
+fitML <- cvam( ~ V1 * V2, data=crime, freq=n )
+# display the ML estimate for beta and pi
+get.coef( fitML )
+get.fitted( fitML, type="prob" )$fit
+# draw from the approximate posterior, display new beta and pi
+set.seed(83425)
+obj <- cvam(fitML, method="approxBayes")
+get.coef( obj )
+get.fitted( obj, type="prob" )$fit
+@
+By default, calling \texttt{cvam} with \texttt{method="approxBayes"} 
+will draw one value of $\bbeta$. This can be
+changed through the control parameter \texttt{iterApproxBayes}. In the
+example below, we simulate $5,000$ values of $\bbeta$. These are
+stored in the \texttt{cvam} object and can be retrieved
+with \texttt{get.coefSeries}. By setting the control parameter
+\texttt{saveProbSeries} to \texttt{TRUE}, we instruct \texttt{cvam} to
+also store the $5,000$ simulated $\bpi$ vectors, which can then be
+retrieved with \texttt{get.probSeries}.
+<<"approxBayesB", echo=TRUE>>=
+# produce 5,000 draws of beta, saving also the resulting pi vectors
+obj <- cvam(fitML, method="approxBayes",
+   control=list(iterApproxBayes=5000, saveProbSeries=TRUE) )
+# display the first few beta and pi vectors
+head( get.coefSeries(obj) )
+head( get.probSeries(obj) )
+@
+One parameter of interest is the change in victimization rate from
+the first time period to the second,
+$\delta = P(\mbox{\texttt{V2="yes"}})- P(\mbox{\texttt{V1="yes"}})$,
+which is equivalent to the off-diagonal difference, $\delta =
+P(\mbox{\texttt{V1="no", V2="yes"}}) -
+P(\mbox{\texttt{V1="yes", V2="no"}})$.
+From the saved series, we can easily compute and summarize the $5,000$
+values of $\delta$.
+<<"approxBayesC", echo=TRUE>>=
+pi.series <- get.probSeries(obj)
+delta <- pi.series[,3] - pi.series[,2]
+summary(delta)
+sum( delta > 0 )
+@
+Most of the $\delta$ values are negative, suggesting that the 
+victimization rate has dropped over time. Only 151 are positive, so a
+simulated Bayesian p-value for testing the null hypothesis $\delta=0$
+against the two-sided alternative is $2\times (151/5,000) = 0.0604$.
+
+\subsection{Markov chain Monte Carlo}
+
+With Markov chain Monte Carlo (MCMC), we can put aside the normal
+approximation and obtain Bayesian answers that are approximately
+exact. The answers are exact in the sense that, if the MCMC algorithm
+has run long enough to become independent of the starting values, the
+simulated parameters are drawn from their actual posterior
+distribution, with no large-sample approximations. The answers are
+approximate in the sense that, because MCMC is a type of Monte Carlo
+simulation, summaries of a posterior distribution from MCMC always
+contain random noise. That noise can be reduced by performing more
+iterations, so at least in principle, the MCMC summaries can be made
+arbitrarily precise. For general-purpose reviews of MCMC and its role
+in Bayesian inference, see \cite{gamerman2006markov} or
+\cite{gelman2013bayesian}.
+
+To run MCMC on a \texttt{cvam} model, call \texttt{cvam} with
+\texttt{method="MCMC"}. For log-linear models fit with
+\texttt{saturated=FALSE}, two versions of MCMC are available. 
+The default version is data augmentation (DA), a two-step procedure that
+bears a strong resemblance to EM. Within each cycle of DA, 
+any missing or coarsened values in the dataset are imputed under the
+current value for $\bbeta$, and $\bbeta$ is then 
+updated by one step of a Metropolis-Hastings procedure. The other
+version is a random-walk Metropolis (RWM) algorithm that does not
+impute the missing or coarsened values at each cycle. For saturated
+models fit with \texttt{saturated=TRUE}, MCMC is always implemented as
+DA. The choice of algorithm, the number of iterations
+performed, and many other options pertaining to MCMC can be selected
+through control parameters.
+Details of these MCMC procedures and their control parameters are given in
+\ref{app:MCMC}. 
+
+In a moment, we will recreate our simulation of
+$\delta=\pi_{12}-\pi_{21}$ with the \texttt{crime} dataset using
+MCMC. Before that, let's simply invoke \texttt{cvam} with
+\texttt{method="MCMC"} and see what happens.
+<<"mcmcA", echo=TRUE>>=
+set.seed(4358)
+fit <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC")
+summary(fit)
+@
+The output from \texttt{summary} explains that \texttt{cvam} ran the
+DA algorithm for 5,000 iterations. The number of iterations can be
+changed through the control parameter \texttt{iterMCMC}.
+The coefficients and standard
+errors displayed in the summary are ``direct estimates,'' which means
+that they were computed 
+from a running average and standard deviation of the simulated
+$\bbeta$ values over the 
+iterations of MCMC. The precision of these Monte Carlo summaries depends
+on the number of iterations and on the convergence behavior of
+the Markov chain. The series of $\bbeta$ values was stored in
+the \texttt{cvam} object and can be retrieved with
+\texttt{get.coefSeries}.
+By default, \texttt{get.coefSeries} returns the series as an
+\texttt{mcmc} object from the package \texttt{coda}
+\citep{plummer2006coda}, which provides a variety of tools
+for assessing convergence and analyzing the output from MCMC runs. 
+For example, the \texttt{summary} method displays means, standard
+deviations and quantiles.
+<<"mcmcB", echo=TRUE>>=
+betaSeries <- get.coefSeries( fit )
+library(coda)
+summary( betaSeries )
+@
+The \texttt{plot} method creates trace plots and density estimates,
+<<"mcmcC", echo=TRUE, fig=FALSE>>=
+# display trace plots and density estimates
+plot( betaSeries )
+@
+with the result shown in Figure \ref{fig:codaPlotCrime}.
+\begin{figure}
+\centering
+<<echo=FALSE, fig=TRUE>>=
+plot( betaSeries )
+@
+\caption{Trace plots and density estimates for log-linear coefficients
+from the \texttt{crime} dataset, produced by
+\texttt{coda}.\label{fig:codaPlotCrime}}
+\end{figure}
+The \texttt{acfplot}  method creates autocorrelation plots,
+<<"mcmcE", echo=TRUE, fig=FALSE>>=
+# display autocorrelation plots
+acfplot( betaSeries )
+@
+with the result shown in Figure \ref{fig:codaAcfplotCrime}.
+\begin{figure}
+\centering
+<<echo=FALSE, fig=TRUE>>=
+acfplot( betaSeries )
+@
+\caption{Plots of the autocorrelation function (ACF) for log-linear
+coefficients from the \texttt{crime} dataset, produced by
+\texttt{coda}.\label{fig:codaAcfplotCrime}}
+\end{figure}
+
+By default, \texttt{cvam} does not store the series of
+simulated $\bpi$ vectors from an MCMC run, but it does store the
+final value of $\bpi$ and the running average of $\bpi$ across the
+iterations. This running average provides the fitted values in the result
+from \texttt{get.fitted}. The result from \texttt{get.fitted} also
+includes predicted true frequencies, which are a running average of
+the simulated true frequencies across the iterations. 
+<<"mcmcG", echo=TRUE>>=
+get.fitted(fit, type="prob")
+@
+To access the series of $\bpi$ vectors, we will have to run the 
+simulation again with the control parameter \texttt{saveProbSeries}
+set to \texttt{TRUE}. In the example below, we repeat the simulation
+with \texttt{saveProbSeries=TRUE}, then we compute and summarize the
+$5,000$ simulated values of $\delta$.
+<<"mcmcg", echo=TRUE>>=
+set.seed(4358)
+fit <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC",
+   control=list( saveProbSeries=TRUE ) )
+piSeries <- get.probSeries(fit)
+delta <- piSeries[,3] - piSeries[,2]
+summary(delta)
+sum( delta > 0 )
+@
+The simulated Bayesian p-value of $2\times (138/5,000) = 0.0552$ is
+very close to the result we obtained from the approximate Bayesian method.
+
+
+\section{Multiple imputation\label{sec:MI}}
+
+\subsection{Multiple imputation with MCMC}
+
+Multiple imputation (MI) \citep{rubin1987multiple, rubin1996multiple}
+is an increasingly popular method for analyzing datasets with missing
+values. With MI, we can perform
+the computations that handle the missing values ahead of time,
+transforming the task into a series of repeated complete-data
+analyses. In the notation that we have been using, $\mbox{\boldmath
+$f$}$ denotes the true frequencies that we would want to analyze if
+there were no missing or coarsened values, the frequencies for the
+table that cross-classifies sample units by variables
+$\bV=(V_1,\ldots,V_J)$. The information available to us is
+$\mbox{\boldmath $f$}^*$, the seen frequencies for patterns of
+coarsened data. MI requires us to specify an imputation model, a
+model that is rich enough to preserve the aspects of the joint
+distribution of $V_1,\ldots,V_J$ that are important for subsequent
+analyses. With MI, we simulate $M$ independent random draws of
+$\mbox{\boldmath $f$}$ from its posterior predictive distribution
+under the imputation model,
+\begin{equation}
+\mbox{\boldmath $f$}^{(m)}
+\,\sim \, P(\mbox{\boldmath $f$}\,|\,\mbox{\boldmath $f$}^*)
+\;\;\;
+\mbox{independently for $m=1,\ldots,M$}.
+\label{eq:generateMI}
+\end{equation}
+The variability among $\mbox{\boldmath $f$}^{(1)}, 
+\ldots,\mbox{\boldmath $f$}^{(M)}$ should not only reflect uncertainty
+due to missing and coarsened values, but also the uncertainty due to
+the fact that the parameters of the imputation model are
+unknown. After creating  the imputed datasets $\mbox{\boldmath f}^{(1)}, 
+\ldots,\mbox{\boldmath f}^{(M)}$, we analyze each one as if it
+were the true $\mbox{\boldmath $f$}$, saving the estimates and 
+measures of uncertainty, and then combine the results using procedures
+described by \cite{rubin1987multiple}, \cite{barnard1999miscellanea},
+and others.
+
+With \texttt{cvam}, we can create the imputations in
+(\ref{eq:generateMI}) by first drawing $M$ independent values of the
+imputation model parameters using an approximate Bayes or MCMC procedure
+described in Section \ref{sec:MCMC}, and then, from each set of
+parameters, generating an imputed dataset using
+\texttt{cvamImpute}. If the imputation frame
+supplied to \texttt{cvamImpute} contains aggregated data and
+frequencies, the result 
+will be $M$ versions of a true data frame, each having its own version
+of $\mbox{\boldmath $f$}$. If the imputation frame supplied to
+\texttt{cvamImpute} 
+contains microdata, the result will be $M$ different versions of the
+microdata with no missing or coarsened values. In the example below,
+we use the \texttt{crime} dataset to create $M=10$ imputed versions of
+the $2\times 2$ table.
+<<"miA", echo=TRUE>>=
+impList <- as.list(1:10) # a list to store the imputed datasets
+set.seed(769090)         # for reproducibility
+for(m in 1:10) {
+   # run MCMC under the non-independence model
+   tmp <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC")
+   # impute under the simulated parameters
+   impList[[m]] <- cvamImpute( tmp, crime, freq=n)
+}
+# display the first two imputations
+impList[1:2]
+@
+
+An easier way to generate multiple imputations is to perform a single run
+of MCMC and save simulated values of $\mbox{\boldmath $f$}$ along the
+way, spacing them far enough apart in the iteration sequence to be
+reasonably sure that they are independent. The number of iterations
+between successive imputations, which we call
+the imputation interval, is set by the control parameter
+\texttt{imputeEvery}. Setting \texttt{imputeEvery} and the number of
+iterations \texttt{iterMCMC} will determine the number of imputations
+that are saved. After the MCMC run, the imputed frequencies are retrieved with
+\texttt{get.imputedFreq}.
+<<"miB", echo=TRUE>>=
+# run MCMC for 5,000 iterations, saving an imputation at every 500th
+result <- cvam( ~ V1 * V2, data=crime, freq=n, method="MCMC",
+   control=list( iterMCMC=5000, imputeEvery=500 ) )
+get.imputedFreq(result)
+@
+
+\subsection{Multiple imputation with an approximate
+posterior\label{sec:approxBayesMI}} 
+
+We can also perform MI  by taking $M$ draws of $\bbeta$
+from the approximate posterior distribution using
+\texttt{method="approxBayes"} and generating an imputation for each
+one. Draws from the approximate posterior are independent, so
+an imputation interval greater than one is unnecessary.
+Setting the
+control parameter \texttt{imputeApproxBayes} to \texttt{TRUE} will
+instruct \texttt{cvam} to create and store an imputation for every
+draw.
+<<"miC", echo=TRUE>>=
+#  run EM, then create ten imputations with approxBayes
+fitML <- cvam( ~ V1 * V2, data=crime, freq=n ) 
+result <- cvam( fitML, method="approxBayes",
+   control=list( iterApproxBayes=10, imputeApproxBayes=TRUE ) )
+get.imputedFreq(result)
+@
+
+\subsection{Combining results from repeated-imputation
+inferences\label{sec:combining}}
+
+Rules for consolidating the results from a multiply-imputed
+data analysis 
+are implemented in the function \texttt{miInference}. This function
+has two required arguments: \texttt{est.list}, a list of estimates to
+be combined, and \texttt{std.err.list}, a list of corresponding
+standard errors. Each list should have $M$ components, where $M$ in
+the number of imputations. Each component may be a scalar or a vector,
+and they should all have the same length. For example, suppose that
+the imputed datasets are analyzed by fitting a logistic regression model
+with 12 coefficients. Each component of \texttt{est.list} will be a
+vector of 12 estimated coefficients, and each component of
+\texttt{std.err.list} will be a vector of 12 standard errors. 
+
+For a very simple example, we will use the imputed versions of
+\texttt{crime} to 
+create an MI-based confidence interval for the odds ratio relating
+\texttt{V1} to \texttt{V2}. Given the frequencies for a $2\times 2$
+table $\mbox{\boldmath $f$} = (f_{11},f_{12},f_{21},f_{22})$, the
+estimated odds ratio is
+\[
+\hat{\omega} \,=\, \frac{f_{11}\,f_{22}}{f_{12}\,f_{21}}.
+\]
+In large samples, the estimated log-odds ratio
+$\hat{\theta}=\log \hat{\omega}$ is approximately normally distributed
+around $\theta=\log\omega$, with estimated variance
+\[
+\hat{V}(\hat{\theta})\,=\,
+\frac{1}{f_{11}}\,+\,\frac{1}{f_{12}}\,+\,\frac{1}{f_{21}}\,+\,
+\frac{1}{f_{22}}
+\]
+\citep{agresti2013categorical}. In the code below, we impute the
+\texttt{crime} dataset $M=10$ times, compute $\hat{\theta}$ and
+$\hat{V}(\hat{\theta})$ from each one, and combine the results.
+<<"miD", echo=TRUE>>=
+set.seed(54981)
+result <- cvam( fitML, method="MCMC",
+   control=list( iterMCMC=5000, imputeEvery=500 ) )
+impData <- get.imputedFreq(result)[-(1:2)] # just the frequencies 
+est.list <- std.err.list <- as.list(1:10)  # to hold the estimates and SEs
+for( m in 1:10 ) {
+   f <- impData[,m]
+   est.list[[m]] <- log( (f[1] * f[4]) / (f[2] * f[3]) )
+   std.err.list[[m]] <- sqrt( sum(1/f) )
+}
+miInference( est.list, std.err.list )
+@
+The combined estimate of the log-odds ratio is $1.28$ with a 
+standard error of $0.27$. The test of the null hypothesis $\theta=0$
+against a two-sided alternative yields a p-value that is essentially zero,
+and the estimated rate of missing information is $37.5$\%. For more
+information on these quantities, see \texttt{?miInference}.
+
+\subsection{A more detailed example of multiple imputation}
+
+For a more elaborate illustration, we return
+to the four-variable example  of Section \ref{sec:AbAny} and produce
+multiple imputations for the microdata. Our imputation model will be
+saturated, which will preserve all possible associations among the variables
+and avoid introducing bias into post-imputation analyses. To start, we
+fit the saturated model using EM, then try a test run of MCMC
+starting from the EM estimate.
+<<"micromiA", echo=TRUE>>=
+# put the four variables into a data frame
+dF <- data.frame( Sex = abortion2000$Sex, RH = RH,
+   PolViews = abortion2000$PolViews, AbAny = abortion2000$AbAny )
+# fit the saturated model with EM, then do a test run of MCMC
+fitEM <- cvam( ~ Sex * RH * PolViews * AbAny, data=dF )
+set.seed(598902)
+fitMCMC <- cvam( fitEM, method="MCMC")
+@
+To understand why MCMC failed, let's examine some of the results from EM.
+<<"micromiB", echo=TRUE>>=
+# display fitted cell probs, rounded to five decimal places
+round( get.fitted(fitEM, type="prob", mfTrue=FALSE ), 5)
+# display some of the coefs and SEs
+head( get.coef(fitEM, withSE=TRUE) )
+@
+Many of the fitted probabilities are close to zero.
+Standard errors for the coefficients are huge, a telltale sign that
+the loglikelihood function is poorly shaped and almost non-concave
+where EM stopped. This example has $N=2,817$ observations and
+72 cells, but many of the cells are empty, causing some aspects of $\bbeta$
+to be poorly estimated or inestimable. To
+address this problem, we could simplfy the model by omitting some of the
+higher-way associations, or we could apply a flattening constant as
+described in Section \ref{sec:flatten}. We could also introduce
+a ridge factor, a term that penalizes the fit for $\bbeta$
+values that are far from zero. A ridge factor shrinks the estimated
+coefficients and moves the estimates away from the boundary, much as a
+flattening constant does, and it reshapes the fitting function to
+become more concave. Let's apply a mild ridge factor of 0.5 and see what
+happens to the fitted probabilities and coefficients.
+<<"micromiC", echo=TRUE>>=
+# re-run EM with a ridge factor of 0.5
+fitEM.ridge <- cvam( ~ Sex * RH * PolViews * AbAny, data=dF,
+   prior=cvamPrior( ridge=.5 ) )
+round( get.fitted(fitEM.ridge, type="prob", mfTrue=FALSE ), 5)
+head( get.coef(fitEM.ridge, withSE=TRUE) )
+@
+The fitted probabilities thet were close to zero are slightly
+larger, the standard errors for the coefficients are dramatically
+smaller, and the coefficients have changed. Whenever we use prior
+information to stabilize a model, it 
+is worth asking whether the results have changed too much, and
+whether the extra information is contradicted by the data. To
+understand this, let's compare the new and old
+estimates in terms of $-2$ times the loglikelihood difference and the
+likelihood ratio.
+<<"micromiD", echo=TRUE>>=
+-2 * ( get.loglik(fitEM.ridge) - get.loglik(fitEM) )
+exp( get.loglik(fitEM) - get.loglik(fitEM.ridge) )
+@
+For rough guidance, we may compare
+$-2$ times the loglikelihood difference to a chi-squared distribution
+with 72 degrees of freedom, because the saturated Poisson model has 72
+free parameters (one per cell). With $P(\chi^2_{72}\geq
+1.67)\approx 1$, there is essentially no evidence to reject the new
+estimates in favor of the old. The likelihood ratio can be viewed as a
+Bayes factor. By a widely used criterion, a Bayes factor between $1$ and $3$
+means that the evidence to prefer the old estimates to the new is
+``not worth more than a bare mention'' \citep{jeffreys1961theory,
+kass1995bayes}.
+
+Adding prior information effectively stabilized the estimates from EM,
+but the MCMC algorithm still does not work.
+<<"micromiE", echo=TRUE>>=
+set.seed(87900)
+fitMCMC <- cvam( fitEM.ridge, method="MCMC" )
+@
+The procedure aborted after 25 iterations, because the
+Metropolis-Hastings jumping rule failed to generate any plausible new
+values for $\bbeta$. The default settings for MCMC do not always work,
+especially when some areas of the complete-data table are sparsely
+populated. When this happens, we can address the problem by:
+\begin{itemize}
+\item using stronger prior information, either by increasing the ridge
+factor or introducing a flattening constant. There is a danger of
+adding too much, so this should be done cautiously and sparingly.
+\item changing the tuning constants for the proposal distribution
+through the control parameters \texttt{tuneDA}, as described in
+\ref{app:MCMC}.
+\item changing the algorithm from data augmentation (DA) to
+random-walk Metropolis (RWM), by setting the control parameter
+\texttt{typeMCMC} to \texttt{"RWM"} and fiddling with the tuning
+constants \texttt{tuneRWM}.
+\end{itemize}
+Because this example involves a saturated model, we can also
+\begin{itemize}
+\item run the procedure with \texttt{saturated=TRUE}, which uses a
+different DA algorithm that is more stable and never gets stuck.
+\end{itemize}
+Finally, if all else fails, we can still
+\begin{itemize}
+\item switch to the approximate Bayesian procedure described in
+Section \ref{sec:approxBayesMI}.
+\end{itemize}
+For this example, we switched to RWM, which solved the problem of
+getting stuck. With the default tuning constants, the acceptance
+rate was about 61\%, which is higher than optimal. In general, RWM
+performs best when the acceptance rate is $20$--$40$\%. Increasing the
+scale factor for the random-walk proposal will bring down the
+acceptace rate, but if we raise the scale factor too much, the
+algorithm gets stuck. With a little experimentation and a few more
+test runs, we found that a scale factor of $0.17$ struck a nice
+balance. 
+<<"micromiF", echo=TRUE>>=
+set.seed(87900)
+fitMCMC <- cvam( fitEM.ridge, method="MCMC",
+   control=list( typeMCMC="RWM", tuneRWM=c(1000,.17) ) )
+@
+Plots of the coefficient series created with \texttt{coda} (not shown)
+revealed that this chain mixes poorly, and it takes 500 or more
+iterations for the ACF functions to die down. Collecting accurate posterior
+summaries from a parameter series would require extremely long runs
+of MCMC. In settings like these, multiple imputation has a powerful
+advantage over direct simulation of the posterior summaries, because
+with MI, we only need a small number of independent draws. In the
+example below, we run MCMC for 2,500 cycles, impute the microdata with
+\texttt{cvamImpute}, then repeat the process $M=25$ times. 
+<<"micromiG", echo=TRUE>>=
+M <- 25
+impList <- as.list(1:M)  # dummy list to hold the imputed datasets
+set.seed(2343)
+for( m in 1:M ) {
+   # take 2,500 steps of MCMC, then impute
+   fitMCMC <- cvam( fitMCMC, control=list(iterMCMC=2500) )
+   impList[[m]] <- cvamImpute( fitMCMC, data=dF )
+}
+# display the first few rows of the original data and 
+# the first imputed dataset
+head( dF )
+head( impList[[1]] )
+@
+
+We finish this illustration by fitting a 
+logistic regression model to each imputed dataset and combining the
+results. The response is a binary indicator for \texttt{AbAny="Yes"},
+and the predictors include main effects for \texttt{Sex}, \texttt{RH}
+and \texttt{PolViews}.
+<<"micromiH", echo=TRUE>>=
+est.list <- SE.list <- as.list(1:M)
+for( m in 1:M ) {
+   # extract the imputed dataset
+   impData <- impList[[m]]
+   # create the binary response and fit the logit model
+   impData$y <- 1 * ( impData$AbAny == "Yes" )
+   logitFit <- glm( y ~ Sex + RH + PolViews, data=impData,
+      family=binomial() )
+   # extract matrix of coefficients and SEs
+   coefMat <- summary(logitFit)$coef
+   est.list[[m]] <- coefMat[,1]
+   SE.list[[m]]  <- coefMat[,2]
+}
+# combine the results with Rubin's rules
+miInference( est.list, SE.list )
+@
+The results are consistent with our log-linear analyses in Section
+\ref{sec:AbAny}: \texttt{RH} and \texttt{PolViews} are strong
+predictors of \texttt{AbAny}, but \texttt{Sex} is not.
+
+\subsection{Creating synthetic data}
+
+The function \texttt{cvamImpute} can also generate synthetic data,
+with applications to statistical disclosure limitation
+\citep{raghunathan2003multiple, reiter2004simultaneous}, parametric
+bootstrapping \citep{efron2012bayesian}, and Bayesian model criticism
+through posterior predictive checks \citep{rubin1984bayesianly,
+gelman2013bayesian}. To generate synthetic data, call
+\texttt{cvamImpute} with the argument \texttt{synthetic=TRUE}. This
+will cause the function to wipe out all observed values in the
+imputation frame, replacing them with missing values and then imputing
+them under the model and parameters in the supplied \texttt{cvam}
+object. If the imputation frame contains microdata, the result will be
+a dataset of the same size filled with synthetic data. If the
+imputation frame has grouped data and frequencies, the result is a
+grouped data frame with one row per cell of the complete-data table
+and synthetic integer frequencies that add up to the total sample size.
+<<"syntheticA", echo=TRUE>>=
+# take 2,500 more steps of MCMC and draw a synthetic dataset
+fitMCMC <- cvam( fitMCMC )
+synthData <- cvamImpute( fitMCMC, data=dF)
+head( synthData )
+@
+
+\section{Latent-class analysis\label{sec:latent}}
+
+\subsection{Background}
+
+Latent-class (LC) analysis  has a long history of use in the social
+sciences \citep{lazarsfeld1968latent, clogg1984latent}, medical and
+psychiatric diagnosis \citep{formann1996latent, bandeen1997latent},
+analysis of response errors in censuses and surveys
+\citep{biemer2001enumeration} and elsewhere.  Specialized routines for
+LC modeling are available in SAS \citep{collins2010latent,lanza2015proc}, R
+\citep{linzer2011polca} Mplus \citep{muthen2017mplus} and Latent GOLD
+\citep{vermunt2016technical}.  Because LC models are an example of
+log-linear models with incomplete data 
+\citep{hagenaars1993loglinear}, we can fit them with \texttt{cvam}.
+Special care is needed, however, because LC models have unique
+features that cause them to behave differently from other types of
+log-linear models.
+
+\subsection{A simple example with two latent classes}
+
+An LC model posits a categorical variable that is completely missing
+and relies on multiple observable variables to measure it. For
+example, \cite{yang1997latent} examined the results from 
+diagnostic tests for HIV infection. Four tests, which are labeled
+\texttt{A}, \texttt{B}, \texttt{C} and \texttt{D}, were given to
+$N=428$ high-risk patients. The report from each test was either
+\texttt{"neg"} (negative) or \texttt{"pos"} (positive). The aggregated
+results are 
+distributed with \texttt{cvam} in a dataset called \texttt{hivtest}.
+<<"hivA", echo=TRUE>>=
+hivtest
+@
+None of these tests is a gold standard; any of them can produce false
+positives or false negatives. Suppose that each patient has a true infection
+status, a two-level
+factor that we will call \texttt{L}. 
+That factor is not found in the data
+frame, but we can create it with the function \texttt{latentFactor}.
+This function accepts two arguments; the first is the length of
+the latent factor, and the second is its number of levels.
+<<"hivB", echo=TRUE>>=
+hivtest$L <- latentFactor( NROW(hivtest), 2 )
+hivtest
+@
+
+A traditional LC model assumes that the items measuring the latent
+variable are conditionally independent given the latent variable. 
+That assumption, known as local independence, does not necessarily
+hold, but it provides a useful place to begin, and we will evaluate
+the assumption later. For this example, the formula is:
+\[
+\mbox{\texttt{$\sim$ L*A + L*B + L*C + L*D}}
+\]
+Before fitting this model, we need to make two important
+points. The first point is that \emph{the default starting-value
+procedure should not be used with an LC model}. By
+default, \texttt{cvam} starts by assigning equal
+probabilities to all cells of the complete-data table. For an LC model,
+this happens to be a saddlepoint of the loglikelihood
+function, a stationary value that is not a maximum, but where EM will
+stop changing from one iteration to the next. To avoid getting stuck at this
+saddlepoint, we can set the control parameter \texttt{startValJitter}
+to a small positive value, which adds random Gaussian noise to the
+starting values.
+
+A second important point about LC models is that \emph{their ML
+estimates are not unique.}  For a model with $C$ classes, there are
+$C\,!$ equivalent solutions corresponding to all possible ways that the
+classes can be ordered from $1$ to $C$. With randomly jittered
+starting values, 
+we can set the random number generator seed to ensure that, if we need
+to run the procedure again, we will not converge to a different
+solution.
+
+<<"hivC", echo=TRUE>>=
+# set the RNG seed and fit the model of local independence
+set.seed(125)
+fit <- cvam( ~ L*A + L*B + L*C + L*D, data=hivtest, freq=COUNT,
+   control = list( startValJitter=.1 ) )
+@
+The ML estimates lie on a boundary, which is quite common for LC
+models.
+
+\subsection{Parameter estimates}
+
+Parameter estimates that are traditionally reported for an LC model
+include the class prevalences, which are the marginal probabilities for
+the latent variable, and the measurement parameters, which are the
+conditional probabilities for each item given the latent variable,
+We can obtain these with a single call to \texttt{cvamEstimate},
+putting the formulas into a list.
+<<"hivE", echo=TRUE>>=
+cvamEstimate( list( ~L, ~A|L, ~B|L, ~C|L, ~D|L ), fit )
+@
+For the estimates on a boundary, the reported standard errors are
+zero, suggesting that the estimates have no uncertainty. That is
+implausible, and it is one of the reasons why \texttt{cvam} issued a
+warning. Adding even a small amount of prior information through a
+flattening constant or ridge factor can address that
+problem. Examining the pattern of conditional
+probabilities, we see that at this solution, latent
+class \texttt{L=1} contains individuals who are likely to test
+positive, and class \texttt{L=2} contains individuals who are likely
+to test negative. With different random generator seeds, these
+class labels could easily be reversed.
+Interpreting \texttt{L=1} as actual
+HIV positive and \texttt{L=2} as actual HIV negative, the estimated
+sensitivities are
+\begin{eqnarray}
+P( \mbox{\texttt{A="pos"}} \,|\, \mbox{\texttt{L=1}} )
+& = & 1.000, \nn \\
+P( \mbox{\texttt{B="pos"}} \,|\, \mbox{\texttt{L=1}} )
+& = & 0.571, \nn \\
+P( \mbox{\texttt{C="pos"}} \,|\, \mbox{\texttt{L=1}} )
+& = & 0.913, \nn \\
+P( \mbox{\texttt{D="pos"}} \,|\, \mbox{\texttt{L=1}} )
+& = & 1.000, \nn
+\end{eqnarray}
+and the estimated specificities are
+\begin{eqnarray}
+P( \mbox{\texttt{A="neg"}} \,|\, \mbox{\texttt{L=2}} )
+& = & 0.970, \nn \\
+P( \mbox{\texttt{B="neg"}} \,|\, \mbox{\texttt{L=2}} )
+& = & 0.964, \nn \\
+P( \mbox{\texttt{C="neg"}} \,|\, \mbox{\texttt{L=2}} )
+& = & 1.000, \nn \\
+P( \mbox{\texttt{D="neg"}} \,|\, \mbox{\texttt{L=2}} )
+& = & 0.919. \nn
+\end{eqnarray}
+
+\subsection{Lack-of-fit testing and residuals}
+
+The standard lack-of-fit test for LC model compares its
+loglikelihood to that of a saturated model without the latent
+variable. 
+<<"hivFa", echo=TRUE>>=
+# perform the lack-of-fit test
+fitSat <- cvam( ~ A*B*C*D, data=hivtest, freq=COUNT )
+anova( fit, fitSat, pval=TRUE )
+@
+The accuracy of the reported p-value is dubious, because some of
+the fitted cell means are at or near zero. With many LC models,
+the lack-of-fit test is at best a rough guide. Nevertheless, the
+result suggests that this model could be improved. 
+
+When computing residuals for an LC model, we must address the fact
+that the model of interest and the saturated model have different numbers
+of cells. First, we extract from the saturated model the frame
+containing the predicted true frequencies.
+<<"hivFb", echo=TRUE>>=
+satFrame <- get.fitted( fitSat, type="mean" )
+# this frame has 16 rows; display the first few
+head(satFrame)
+# get rid of the fitted values, because they are redundant
+satFrame$fit <- NULL
+@
+Next, we extract the fitted values from the LC model.
+<<"hivFbb", echo=TRUE>>=
+LCFrame <-  get.fitted( fit, type="mean" )
+# this frame has 32 rows; display the first few
+head(LCFrame)
+@
+To compare these fitted means to the predicted true frequencies, we
+must sum them over the levels of the latent variable and arrange them in
+the same order as the cells of the saturated model.
+<<"hivFc", echo=TRUE>>=
+muHatTable <- xtabs( fit ~ A + B + C + D, data=LCFrame )
+muHatFrame <- as.data.frame( muHatTable, responseName = "muHat" )
+# diplay the first few rows to make sure that the
+# cell order is correct
+head( muHatFrame)
+@
+Finally, we compute the quasi-Pearson residuals, and put the fitted
+values and residuals into the frame that holds
+the predicted true frequencies.
+<<"hivFd", echo=TRUE>>=
+muHat <- muHatFrame$muHat
+quasiPearson <- ( satFrame$freq - muHat ) / sqrt( muHat )
+satFrame$muHat <- round( muHat, 3 )
+satFrame$quasiPearson <- round( quasiPearson, 2 )
+satFrame
+@
+The residuals in rows 10 and 12 are a bit large, suggesting again that
+the model can be improved.
+
+\subsection{Departures from local independence}
+
+One way to improve the fit of an LC model is to increase the number of
+latent classes. For this example, that is not really an option,
+because we believe HIV infection status is a binary condition, and
+because the tests \texttt{A}, \texttt{B}, \texttt{C} and
+\texttt{D} were designed for binary diagnosis.  Fit may also be
+improved by relaxing the assumption of local independence. This should
+be done cautiously and sparingly, because LC models 
+use up degrees of freedom very quickly. With binary items and a
+binary latent 
+class, a three-way association such as \texttt{L:A:B} adds two more
+parameters to the model. In the code below, we add each of these
+three-way associations without the others and compare the fit 
+to local independence and the saturated model.
+<<"hivI", echo=TRUE>>=
+set.seed(85657)
+fitLAB <- cvam( ~ L*A + L*B + L*C + L*D + L*A*B, 
+   data=hivtest, freq=COUNT,
+   control = list(startValJitter=.1) )
+anova(fit, fitLAB, fitSat, pval=TRUE)
+fitLAC <- cvam( ~ L*A + L*B + L*C + L*D + L*A*C, 
+   data=hivtest, freq=COUNT,
+   control = list(startValJitter=.1) )
+anova(fit, fitLAC, fitSat, pval=TRUE)
+fitLAD <- cvam( ~ L*A + L*B + L*C + L*D + L*A*D, 
+   data=hivtest, freq=COUNT,
+   control = list(startValJitter=.1) )
+anova(fit, fitLAD, fitSat, pval=TRUE)
+fitLBC <- cvam( ~ L*A + L*B + L*C + L*D + L*B*C, 
+   data=hivtest, freq=COUNT,
+   control = list(startValJitter=.1) )
+anova(fit, fitLBC, fitSat, pval=TRUE)
+fitLBD <- cvam( ~ L*A + L*B + L*C + L*D + L*B*D, 
+   data=hivtest, freq=COUNT,
+   control = list(startValJitter=.1) )
+anova(fit, fitLBD, fitSat, pval=TRUE)
+fitLCD <- cvam( ~ L*A + L*B + L*C + L*D + L*C*D, 
+   data=hivtest, freq=COUNT,
+   control = list(startValJitter=.1) )
+anova(fit, fitLCD, fitSat, pval=TRUE)
+@
+The associations \texttt{L:A:D} and \texttt{L:B:C} are both statistically
+significant. Adding either of them
+without the other produces a model that fits well, but adding both of
+them would be of no value.
+<<"hivJ", echo=TRUE>>=
+fitBoth <- cvam( ~ L*A + L*B + L*C + L*D + L*A*D + L*B*C, 
+   data=hivtest, freq=COUNT,
+   control = list(startValJitter=.1) )
+anova(fitLAD, fitBoth)
+anova(fitLBC, fitBoth)
+@
+
+\subsection{Posterior predictions}
+
+With two plausible models and no compelling reason to choose one over
+the other, we arbitrarily pick the model with \texttt{L:B:C} and
+examine its implications.
+Using the function \texttt{cvamPredict}, we can obtain the estimated posterior
+probabilities of \texttt{L=1} and \texttt{L=2} for each row of the
+original dataset. 
+<<hivK, echo=TRUE>>=
+# get predicted probabilities and display them with the dataset
+pred <- cvamPredict( ~L, fitLBC, data=hivtest )
+cbind( hivtest, round(pred, 3) )
+@
+Notice that in this fitted model, the labels for the latent classes have
+switched, so \texttt{L=1} now represents HIV-negative and
+\texttt{L=2} represents HIV-positive. These
+predictions apply to the patients in this study, each of whom was
+given all four tests. In actual medical practice, it is more
+likely for a patient to receive one of the four tests. In the example
+below, we create a new prediction frame that shows the posterior
+probabilities given a positive or negative result for each test apart
+from the others.
+<<"hivk", echo=TRUE>>=
+predFrame <- hivtest[1:8,]
+predFrame$COUNT <- NULL
+predFrame[["A"]][] <- NA
+predFrame[["B"]][] <- NA
+predFrame[["C"]][] <- NA
+predFrame[["D"]][] <- NA
+predFrame[["A"]][1] <- "pos"; predFrame[["A"]][2] <- "neg"
+predFrame[["B"]][3] <- "pos"; predFrame[["B"]][4] <- "neg"
+predFrame[["C"]][5] <- "pos"; predFrame[["C"]][6] <- "neg"
+predFrame[["D"]][7] <- "pos"; predFrame[["D"]][8] <- "neg"
+predFrame[["A"]] <- coarsened( predFrame[["A"]] )
+predFrame[["B"]] <- coarsened( predFrame[["B"]] )
+predFrame[["C"]] <- coarsened( predFrame[["C"]] )
+predFrame[["D"]] <- coarsened( predFrame[["D"]] )
+pred <- cvamPredict( ~L, fitLBC, data=predFrame )
+cbind( predFrame, round(pred, 3) )
+@
+
+And in the code below, we produce posterior predictions under the
+model of local independence.
+<<"hivL", echo=TRUE>>=
+pred <- cvamPredict( ~L, fit, data=predFrame )
+cbind( predFrame, round(pred, 3) )
+@
+Aside from the fact that the class labels are different, the predicted
+values from the two models are essentially identical. Including the
+\texttt{L:B:C} association produces a better fitting model but does
+not change the diagnostic implications.
+
+\subsection{MCMC for latent-class models}
+
+Running MCMC on an LC model is straightforward, but first we must
+address the fact that the ML estimates lie on a boundary. 
+Adding a small bit of prior information through a ridge factor
+solves the problem.
+<<"hivM", echo=TRUE>>=
+# re-fit the model with EM using a small ridge factor
+set.seed(7666)
+fitLBC <- cvam( ~ L*A + L*B + L*C + L*D + L*B*C, 
+   data=hivtest, freq=COUNT, prior=cvamPrior( ridge=.1 ),
+   control = list(startValJitter=.1) )
+@
+The default DA procedure gets stuck, but with
+a little experimentation, we found that RWM with tuning parameters
+\texttt{c(1000,.5)} works well for this problem.
+<<"hivMa", echo=TRUE>>=
+# do a long run of MCMC and save ten imputed datasets
+fitMCMC <- cvam(fitLBC, method="MCMC",
+   control=list( typeMCMC="RWM", tuneRWM=c(1000,.5),
+      iterMCMC=25000, imputeEvery=2500 ) )
+@
+It is possible for the latent-class labels to permute during an MCMC
+run, which complicates the task of extracting posterior summaries of
+parameters from the output stream.  Many solutions to the
+label-switching problem have been proposed
+\citep{richardson1997bayesian, celeux2000computational,
+chung2004difficulties, papastamoulis2014handling}. Here we suggest a
+pragmatic and simple method: instead of working with the parameter
+series, collect and analyze multiple imputations of the complete-data
+table. It is easy to examine a few imputed datasets to see if label switching
+has occurred, and if it has, the problem can be solved by a simple
+relabeling of the latent factor in the affected datasets. 
+<<"hivN", echo=TRUE>>=
+# check to see if any label switching has occurred
+impData <- get.imputedFreq(fitMCMC)
+head(impData)
+@
+In each of these imputed tables, the 170 patients with negative
+results on all four tests were all assigned to class \texttt{L=2}. If
+label switching had occurred, we would have occasionally seen them
+assigned to \texttt{L=1}.
+
+With these imputed datasets, we can see why the model of local independence
+did not fit. Taking the first imputation and collapsing it down to the
+\texttt{B} $\times$ \texttt{C} $\times$
+\texttt{L} margins, we examine the conditional \texttt{B} $\times$
+\texttt{C} tables for  \texttt{L=1} and \texttt{L=2}.
+<<"hivNa", echo=TRUE>>=
+impData$freq <- impData[["imp.1"]] # first imputation
+BCL <- xtabs( freq ~ B + C + L, data=impData )
+BCL
+@
+The results from tests \texttt{B} and \texttt{C} are strongly
+correlated for the \texttt{L=1} group, which now represents patients
+who are HIV-positive. For the HIV-negative patients
+(\texttt{L=2}), the data are not sufficient to compute an odds
+ratio. Using the formulas from Section
+\ref{sec:combining}, we compute the conditional log-odds ratios and
+their standard errors from each imputed dataset, then combine the
+results. To avoid problems due to zero cells, we add
+$1/2$ to each cell before computing the odds ratio.
+<<"hivO", echo=TRUE>>=
+# use multiple imputations to examine the conditional
+# BC odds ratios given L=1 and L=2
+est.list <- SE.list <- as.list(1:10)
+for( m in 1:10 ) {
+   # get the imputed marginal table BxCxL
+   impName <- paste( "imp", format(m), sep="." )
+   impData$freq <- impData[[impName]]
+   BCL <- xtabs( freq ~ B + C + L, data=impData )
+   # add 1/2 to every cell to avoid problems
+   BCL <- BCL + .5
+   # get BC log-odds ratio and SE for L=1
+   BCL.1 <- BCL[,,"1"]
+   logOR.1 <- log( ( BCL.1[1,1] * BCL.1[2,2] ) /
+      ( BCL.1[1,2] * BCL.1[2,1] ) )
+   SE.1 <- sqrt( sum( 1/BCL.1 ) )
+   # get BC log-odds ratio and SE for L=2
+   BCL.2 <- BCL[,,"2"]
+   logOR.2 <- log( ( BCL.2[1,1] * BCL.2[2,2] ) /
+      ( BCL.2[1,2] * BCL.2[2,1] ) )
+   SE.2 <- sqrt( sum( 1/BCL.2 ) )
+   # save the estimates and SEs
+   est.list[[m]] <- c( logOR.1, logOR.2 )
+   SE.list[[m]] <- c( SE.1, SE.2 )
+}
+miInference( est.list, SE.list )
+@
+
+\bibliographystyle{apa}
+\bibliography{cvamBibliography}
+
+\appendix
+\gdef\thesection{Appendix \Alph{section}}
+
+\thispagestyle{empty}
+
+\section{Notation for multivariate categorical
+data\label{app:notation}}
+
+Notation for describing multivariate categorical models can be
+complicated, because the data can be expressed in so many different
+forms; here we strive for brevity and generality. Scalars will be
+written in lightface, vectors and other arrays in
+boldface.  Let $\bV_{\!i}=(V_{i1},\ldots,V_{iJ})$ denote a vector of $J$
+categorical random variables for sample unit $i$,
+where $i=1,\ldots,N$ indexes units in the microdata sense, and $N$ is
+the total sample size. The vectors $\bV_1,\ldots,\bV_N$ are not necessarily
+seen, because data may arrive in a tabulated or grouped
+formats, and even when microdata are given, some of the $V_{ij}$'s could be
+missing or coarsened. The set of possible values taken by
+$V_{ij}$ is
+\[
+\mathbb{V}_j \; = \;
+\{ 1, 2, \ldots, \#\mathbb{V}_j \}.
+\]
+(The symbol `$\#$' is the cardinality operator. When applied to a set,
+it returns the number of elements in the set.) Let
+$\bv=(v_1,\ldots,v_J)$ denote a possible value of
+$\bV_{\!i}$. For now, we suppose that $\bv$ lies within the set
+\[
+\mathbb{V} \,=\,
+\mathbb{V}_1\,\times\,\mathbb{V}_2\,\times\,\cdots\,\times\,
+\mathbb{V}_J\,=\,\prod_{j=1}^J\mathbb{V}_j,
+\]
+where `$\times$' and `$\prod$' denote the Cartesian product. In
+\ref{app:loglin}, we will discuss the possibility of structural zeros,
+cells within 
+$\mathbb{V}$ that are disallowed and whose probabilities are fixed at
+zero. Denote the probability of the event $\bV_{\!i}\,=\,\bv$ by
+\[
+\pi_{\bvsub}\,=\,P(V_{i1}=v_1,\ldots,V_{iJ}=v_J),
+\]
+and the vector of probabilities for all cells by
+\[
+\bpi\,=\,(\pi_\bvsub\,:\,\bv\in\mathbb{V}).
+\]
+We assume that $\bpi$ vector lies within the
+$(\#\mathbb{V}-1)$-dimensional open 
+simplex 
+\[
+\mathbb{S}\,=\,\left\{
+\bpi\,:\,0 < \pi_\bvsub < 1\,,\bv\in\mathbb{V}
+\,\cap\,\sum_{\bvsub\in\mathbb{V}}\pi_\bvsub = 1\right\}.
+\]
+Under multinomial sampling, in which units are
+independently drawn from a common population, the loglikelihood
+function for $\bpi$ based on $\bV_1,\ldots,\bV_N$ is
+\[
+l_\pi(\bpi\,|\,\bV_1,\ldots,\bV_N) \,=\,
+c \, +\, \sum_{i=1}^N
+\log P(\bV_{\!i}\,|\,\bpi),
+\]
+where $c$ is an arbitrary constant. But
+\bea
+l_\pi(\bpi\,|\,\bV_1,\ldots,\bV_N) & = &
+\sum_{i=1}^N \sum_{\bvsub\in\mathbb{V}}
+I(\bV_{\!i} \,=\,\bv)\,\log \pi_{\bvsub}
+\nn\\
+& = & 
+\sum_{\bvsub\in\mathbb{V}} f_{\bvsub} \log \pi_{\bvsub},
+\label{eq:multLoglik}
+\eea
+where $f_{\bvsub}=\sum_{i=1}^N I(\bV_{\!i} \,=\,\bv)$ is the frequency in
+cell $\bv$, and $I(\cdot)$ is the indicator function equal to one if
+its argument is true and zero otherwise. Because this function
+depends on $\bV_1,\ldots,\bV_N$ only through the sufficient statistic
+ ${\mbox{\boldmath $f$}}\,=\,(f_{\bvsub} :
+\bv\in\mathbb{V})$, 
+we will write it as $l_\pi(\bpi\,|\,\mbox{\boldmath $f$})$.
+We will also call it the
+complete-data multinomial loglikelihood, because it is the function we
+would use to estimate $\bpi$ under multinomial sampling if
+${\mbox{\boldmath $f$}}$ were fully observed. Without further
+restrictions on $\bpi$, and without any 
+missing or coarsened values,
+the maximum-likelihood (ML) estimate for $\bpi$ under multinomial
+sampling given by the sample proportions
+\begin{equation}
+\argmax_{\bpi\,\in\,\mathbb{S}} \, l_\pi(\bpi\,|\,\mbox{\boldmath
+$f$}) \,=\,N^{-1}{\mbox{\boldmath $f$}}
+\label{eq:saturatedML}
+\end{equation}
+\citep{agresti2013categorical}.
+
+\section{Alternative sampling distributions\label{app:sampling}}
+
+\subsection{Poisson sampling}
+
+Under multinomial sampling, $N$ is regarded as fixed, 
+$\mbox{\boldmath $f$}$ has a multinomial distribution
+\be
+\mbox{\boldmath $f$} \, | \, N, \bpi \, \sim \,
+\mbox{Mult}(N,\bpi),
+\label{eq:multSamp}
+\ee
+and the elements of $\mbox{\boldmath $f$}$ are negatively
+intercorrelated because 
+of the constraint $f_\bplus=\sum_{\bvsub \in \mathbb{V}} f_\bvsub =
+N$. (Whenever a 
+vector subscript is replaced by `\bplus', it denotes summation over the
+subscript.) Even when $N$ is fixed by the study design,
+it may be convenient to treat the elements of $\mbox{\boldmath $f$}$ as
+independent Poisson variates with means $\bmu=(\mu_\bvsub : \bv\in
+\mathbb{V})$,
+\be
+f_\bvsub \, | \, \bmu \, \sim \, \mbox{Poisson}(\mu_\bvsub)\,\,\,
+\mbox{independently for $\bv \in \mathbb{V}$},
+\label{eq:poisSamp}
+\ee
+which makes $N$ a random variable.
+Using a well known relationship between the Poisson and multinomial
+distributions, the joint distribution
+function for $\mbox{\boldmath $f$}$ implied by Equation
+(\ref{eq:poisSamp}) can be factored as 
+\begin{itemize}
+\item a Poisson distribution function for $N$, with mean $\phi = \mu_\bplus =
+\sum_{\bvsub\in\mathbb{V}} \mu_\bvsub$, multiplied by 
+\item the multinomial distribution function implied by Equation
+(\ref{eq:multSamp}), with $\bpi = \phi^{-1} \bmu$
+\end{itemize}
+\citep{agresti2013categorical}. Consequently, the Poisson-induced
+loglikelihood function for $\bmu$, 
+\begin{equation}
+l_\mu(\bmu\,|\,\mbox{\boldmath $f$}) \,=\,
+\sum_{\bvsub\in\mathbb{V}} \left( \,
+f_\bvsub \log \mu_\bvsub \, - \, \mu_\bvsub
+\,\right),
+\label{eq:PoissonLogLik}
+\end{equation}
+can be written as
+\be
+l_\mu(\phi \bpi\,|\,\mbox{\boldmath $f$}) \,=\, 
+l_\phi(\phi\,|\,N) \,+\, 
+l_\pi(\bpi\,|\,\mbox{\boldmath $f$}),
+\label{eq:poisSurrogate}
+\ee
+where $l_\phi(\phi\,|\,N) \,=\, N\log\phi\,-\,\phi$ and
+$l_\pi(\bpi\,|\,\mbox{\boldmath $f$})$ is the multinomial
+loglikelihood. At any fixed value of $\phi$, 
+$l_\pi(\bpi\,|\,\mbox{\boldmath $f$})$ and 
+$l_\mu(\phi\bpi\,|\,\mbox{\boldmath $f$})$ differ by an additive constant.
+It follows that an ML estimate for $\bpi$ based on the multinomial
+model can be obtained by computing the ML estimate for $\bmu$
+based on the Poisson model, fixing $\phi$ at its estimated value,
+and projecting the estimated $\bmu$ into $\mathbb{S}$ by
+$\bpi\,=\,\phi^{-1}\bmu$ \citep{richards1961method,
+baker1994multinomial}.  The nuisance quantity $\phi$ is an 
+expansion parameter which, after it has been used to convert $\bmu$ to
+$\bpi$, carries no further information about $\bpi$ from a likelihood
+perspective.  Estimating multinomial probabilities by fitting a
+surrogate Poisson model, which is sometimes called the Poisson trick,
+is often used in categorical data analysis to circumvent the
+sum-to-one constraint on $\bpi$ \citep{venables2013modern}. 
+
+When using the Poisson trick, the parameter spaces for $\bmu$ 
+and $\bpi$ must conform in the following sense: if we assume
+$\bpi \in \mathbb{S}_0 \subset \mathbb{S}$, then the surrogate Poisson
+model must be fit over the augmented space
+\[
+\mathbb{M}_0 \,=\,
+\{ \bmu : \bmu=\phi\bpi, 
+\bpi\in\mathbb{S}_0, \phi\in (0,+\infty)\}.
+\]
+This condition, which is automatically satisfied for log-linear
+models, ensures that maximizing $l_\mu$ is equivalent to separately
+maximizing $l_\phi$ and $l_\pi$. In particular, when
+no restrictions are placed on $\bpi$ other than
+$\pi_+ = 1$, the
+ML estimate for $\mu$ is
+\be
+\argmax_{\bmu\,\in\,\mathbb{M}_0} \, l_\mu(\bmu\,|\,\mbox{\boldmath
+$f$}) \,=\,{\mbox{\boldmath $f$}},
+\label{eq:saturatedMLPoisson}
+\ee
+in agreement with Equation (\ref{eq:saturatedML}). 
+
+Although the Poisson trick is usually described in terms of ML estimation,
+the equivalence between $l_\pi(\bpi\,|\,\mbox{\boldmath $f$})$ and
+$l_\mu(\phi\bpi\,|\,\mbox{\boldmath $f$})$ holds at any fixed value for
+$\phi$, not just at the mode. In Bayesian analyses, inferences about
+$\bpi$ under Poisson and multinomial models will be equivalent,
+provided that the prior distribution for $\bmu$, when marginalized
+over $\phi$, is the desired prior for $\bpi$.
+
+When using the Poisson trick, it is 
+crucial to include empty cells, because they are informative in the Poisson
+setting.  A cell with $f_\bvsub = 0$ contributes nothing to $l_\pi$, so
+when fitting a multinomial model to grouped data, rows of a data frame
+with zero frequencies may be omitted. But an occurrence of $f_\bvsub=0$
+does contribute to $l_\mu$, so a surrogate Poisson model must be fit
+to the full contingency table, including any empty cells.
+
+\subsection{Product-multinomial sampling}
+
+The Poisson trick can be extended to situations where some categorical
+variables are regarded as fixed. Suppose we partition the variables as
+$\bV_{\!i}=(\bA_i,\bB_i)$, where $\bA_i=(V_{i1},\ldots, V_{ij})$ and
+$\bB_i=(V_{i,j+1},\ldots, V_{iJ})$ for some $j$, and we are only
+interested in describing the conditional distribution of $\bB_i$ given
+$\bA_i$, treating $\bA_i$ as unmodeled covariates.  Partition the
+microdata as $\bV=(\bA,\bB)$, where $\bA=(\bA_i:i=1,\ldots,N)$ and
+$\bB=(\bB_i:i=1,\ldots,N)$. Denote possible values
+for $\bA_i$ and $\bB_i$ as $\ba=(v_1,\ldots,v_j)\in\mathbb{A}$ and
+$\bb=(v_{j+1},\ldots,v_J)\in\mathbb{B}$, where $\mathbb{A} =
+\mathbb{V}_1\times \cdots \times \mathbb{V}_j$ and $\mathbb{B} =
+\mathbb{V}_{j+1}\times \cdots \times \mathbb{V}_J$, so that
+$\pi_\bvsub=\pi_{\ba\bcomma\bb}$ and $f_\bvsub=f_{\ba\bcomma\bb}$. Denote the marginal
+probability of $\bA_i=\ba$ by
+\[
+\pi^{(A)}_\ba
+\,=\,\sum_{\bb\,\in\,\mathbb{B}}f_{\ba\bcomma\bb}\, ,
+\]
+and the vector of all such marginal probabilities by
+$\bpi^{(A)}=(\pi^{(A)}_\ba : \ba \in \mathbb{A})$. Similarly, denote
+the marginal frequency of $\bA_i=\ba$ by
+\[
+f^{(A)}_\ba \,=\,
+\sum_{\bb\,\in\,\mathbb{B}}f_{\ba\bcomma\bb}\, ,
+\]
+and let $\mbox{\boldmath $f$}^{(A)}=(f^{(A)}_\ba : \ba\in\mathbb{A})$.
+Finally, let
+\[
+\mbox{\boldmath $f$}_{\ba\bcomma\,\bcolon}
+\,=\,(f_{\ba\bcomma\bb} : \bb\,\in\,\mathbb{B})
+\]
+denote the slice of the frequency table $\mbox{\boldmath $f$}$
+corresponding to $\bA_i=\ba$. The multinomial sampling model of
+Equation (\ref{eq:multSamp}) implies that
+\be
+\mbox{\boldmath $f$}^{(A)} \, | \, N,\bpi \,\sim\,
+\mbox{Mult}(N,\bpi^{(A)}),
+\label{eq:prodMultA}
+\ee
+and that
+\be
+\mbox{\boldmath $f$}_{\ba\bcomma\,\bcolon} \,|\,
+\mbox{\boldmath $f$}^{(A)}, \bpi \,\sim\,
+\mbox{Mult}( f^{(A)}_\ba,\bpi^{(B\,|\,A)}_{\ba\bcomma\,\bcolon} )
+\,\,\,\mbox{independently for $\ba\,\in\,\mathbb{A}$},
+\label{eq:prodMultB|A}
+\ee
+where $\pi^{(B\,|\,A)}_{\ba\bcomma\bb}\,=\,\pi_{\ba\bcomma\bb} \,/\,
+\pi^{(A)}_\ba$ denotes the conditional probability of $\bB_i=\bb$
+given $\bA_i=\ba$, and
+\[
+\bpi^{(B\,|\,A)}_{\ba\bcomma\,\bcolon}\,=\,
+(\pi^{(B\,|\,A)}_{\ba\bcomma\bb} :
+\bb\,\in\,\mathbb{B})
+\]
+denotes the slice of all such probabilities corresponding to
+$\bA_i=\ba$. A set of independent multinomial distributions over
+slices of a contingency table is called a product-multinomial model.
+
+It follows that the Poisson loglikelihood in Equation
+(\ref{eq:poisSurrogate}) can be written as
+\begin{itemize}
+\item a Poisson loglikelihood for $\phi$ based on
+$N=$, plus
+\item a multinomial loglikelihood for the marginal probabilities 
+$\bpi^{(A)}$ based on the marginal frequencies $\mbox{\boldmath
+$f$}^{(A)}$, plus
+\item a multinomial loglikelihood for each slice
+of conditional probabilities
+$\bpi^{(B\,|\,A)}_{\ba\bcomma\,\bcolon}$ based on the corresponding
+slice of frequencies $\mbox{\boldmath $f$}_{\ba\bcomma\,\bcolon}$.
+\end{itemize}
+If we want to model only the conditional distribution of $\bB_i$ given
+$\bA_i$, because the marginal frequencies $\mbox{\boldmath
+$f$}^{(A)}$ are fixed by design or are otherwise not of interest, we
+can do so in three different ways.
+\begin{itemize}
+\item Fit separate
+multinomial models to each slice $f^{(A)}_\ba$ to directly estimate
+each slice of 
+conditional probabilities $\bpi^{(B\,|\,A)}_{\ba\bcomma\,\bcolon}$.
+\item Fit a surrogate
+multinomial model to $\mbox{\boldmath $f$}$, compute the conditonal
+probabilities $\bpi^{(B\,|\,A)}_{\ba\bcomma\,\bcolon}$ from the
+estimate of $\bpi$,  and ignore the
+expansion parameters $\bpi^{(A)}$.
+\item Fit a surrogate Poisson model to $\mbox{\boldmath $f$}$, compute
+the conditonal 
+probabilities $\bpi^{(B\,|\,A)}_{\ba\bcomma\,\bcolon}$ from the
+estimate of $\bmu$,  and ignore the
+expansion parameters $\phi$ and $\bpi^{(A)}$.
+\end{itemize}
+Answers from the three methods will be identical, provided that the
+surrogate models impose no restrictions on $\phi$ other than
+$\phi\,\in\,(0,+\infty)$, and no restrictions on $\bpi^{(A)}$ other
+than $\sum_{\ba\,\in\,\mathbb{A}} 
+\pi^{(A)}_\ba \,=\,1$. In practice, this can be satisfied by fitting
+a surrogate model that includes 
+all possible associations among the variables in $\bA_i$
+\citep{venables2013modern}. 
+
+\section{Defining a log-linear model\label{app:loglin}}
+
+For our purposes, a log-linear model is a restriction on $\bpi$ of the form
+\begin{equation}
+\log\bpi
+\,=\,\bo\,+\,\bX\blambda,
+\label{eq:loglinModel}
+\end{equation}
+where $\bX$ is a known $\#\mathbb{V} \times p$ model matrix,
+$\bo=(o_1,o_2,\ldots)^\top$ is a known vector of length
+$\#\mathbb{V}$, and $\blambda = (\lambda_1,\ldots,\lambda_p)^\top$ is
+a vector of unknown coefficients to be estimated (the superscript
+`$\top$' denotes transpose).  The $\bo$ vector is called an offset,
+and it appears in applications where the expected cell frequencies are
+thought to be proportional to a given variable (called exposure) that
+varies across cells. Except in those settings, $\bo$ is usually set to
+$\bzero=(0,\ldots,0)^\top$.  We assume that $\bX$ has full rank. We
+also require $\mathbb{C}(\bX)$, the linear space spanned by the
+columns of $\bX$, to include $\bone = (1,1,\ldots,)^\top$. If $\bone$
+were not in $\mathbb{C}(\bX)$, then it might be impossible to find a
+$\blambda$ for which $\pi_+ = 1$. Following standard practice, we will
+usually satisfy this requirement by choosing an $\bX$ with $\bone$ as
+its first column.  The remaining columns of $\bX$ will correspond to
+terms for main effects of $V_{i1},\ldots,V_{iJ}$ and interactions
+among them. The log-linear model for $\bmu = N\bpi$ implied by Equation
+(\ref{eq:loglinModel}) is
+\begin{equation}
+\log\bmu
+\,=\,\bo\,+\,\bX\bbeta.
+\label{eq:loglinModelMean}
+\end{equation}
+
+In the computations performed by \texttt{cvam}, the ordering of the
+cells in the log-linear model is not specified directly by the
+user. Rather, it is determined by R's formula mechanism and the
+anti-lexicographical ordering of records in a data frame generated by
+the \texttt{aggregate} function.
+
+To make sure that the logarithms in (\ref{eq:loglinModel}) and
+(\ref{eq:loglinModelMean}) are defined, we require $\pi_\bvsub > 0$ and
+$\mu_\bvsub > 0$ for every cell. However, we do allow for the possibility
+of structural zeros, particular values of $\bv=(v_1,\ldots,v_J)$ that
+are deemed by the user to be impossible. Structural zero cells are not
+removed from $\bpi$ or $\bmu$ or from the rows of $\bX$, but they are
+skipped over in all computations that iterate over the cells of the
+table. For example, if structural zeros are present, then every
+sum over $\bv\in\mathbb{V}$ in any formula should be
+understood as as summation over the cells that are not structural
+zeros. 
+
+
+\section{Newton-Raphson with complete data\label{app:NR}}
+
+Under the Poisson surrogate model defined by (\ref{eq:poisSamp}) and
+(\ref{eq:loglinModelMean}), we maximize the loglikelihood over the
+expanded parameter space $\bbeta \in 
+\mathbb{R}^p$ using the Newton-Raphson (NR) method. Writing the
+Poisson-induced loglikelihood as
+\[
+l(\bbeta) \,=\, \sum_{\bvsub\in\mathbb{V}} ( f_\bvsub \log \mu_\bvsub
+\,-\,\mu_\bvsub),
+\]
+one iteration of NR updates the current estimate $\hat{\bbeta}^{(t)}$
+by
+\[
+\hat{\bbeta}^{(t+1)}\,=\,
+\hat{\bbeta}^{(t)}\,+\,=\,
+\left[-\left( \frac{\partial^2 l}{\partial\bbeta\partial\bbeta^\top}
+\right)\right]^{-1}
+\left(\frac{\partial l}{\partial\bbeta}\right),
+\]
+where the derivatives on the right-hand side are evaluated at
+$\bbeta=\hat{\bbeta}^{(t)}$. Letting $\eta_\bvsub=\log\mu_\bvsub$ and
+applying the chain rule
+\[
+\frac{\partial l}{\partial \beta_j}
+\,=\,\sum_{\bvsub\in\mathbb{V}}
+\left(\frac{\partial l}{\partial\mu_\bvsub}\right)
+\left(\frac{\partial\mu_\bvsub}{\partial\eta_\bvsub}\right)
+\left(\frac{\partial\eta_\bvsub}{\partial\beta_j}\right),
+\]
+we obtain 
+\[
+\frac{\partial l}{\partial\beta_j}\, =\,
+\sum_{\bvsub\in\mathbb{V}} (f_\bvsub - \mu_\bvsub)\,x_{\bvsub,j},
+\]
+where $x_{\bvsub,j}$ denotes the $j$th element of the row of the model
+matrix corresponding to cell $\bv$. Applying the chain rule again, we get
+\[
+\frac{\partial^2 l}{\partial\beta_j\partial\beta_k}\, =\,
+- \sum_{\bvsub\in\mathbb{V}} \mu_\bvsub\,x_{\bvsub,j}\,x_{\bvsub,k}.
+\]
+In vector form, the score (first derivative) vector and Hessian
+(second derivative) matrix are
+\[
+\frac{\partial l}{\partial\bbeta} \,=\,
+\bX^\top(\mbox{\boldmath $f$} - \bmu)
+\;\;\;\mbox{and}\;\;\;
+\frac{\partial^2 l}{\partial\bbeta\partial\bbeta^\top} \,=\,
+-\,\bX^\top\bW\bX,
+\]
+where $\bW=\mbox{diag}(\bmu)$ is the square matrix with elements
+$\mu_\bvsub$, $\bv\in\mathbb{V}$ on the diagonal and zeros elsewhere.
+
+In well-behaved problems, NR converges reliably and quickly.  Failure
+to converge generally indicates that the ML estimate is not unique or
+that it lies on a boundary of the parameter space where one or more
+cell probabilities are zero.  If we judge convergence by observing
+whether changes in the elements of the estimated $\bbeta$ are
+sufficiently small, then ML estimates on a boundary will cause some
+elements of $\bbeta$ to run away toward $+\infty$ or $-\infty$,
+depending on how $\bX$ is coded, and the test will fail. But if we
+examine changes in the elements of $\bpi$ or $\bmu$, an estimate on
+the boundary may not be problematic, as the changes from one iteration
+to the next on that scale will become smaller and smaller. In that
+case, there is a potential for numerical overflow or underflow when
+exponentiating the elements of $\bX\bbeta$, and the estimated
+covariance matrix for $\bbeta$ may not be reliable.  
+
+\section{Notation for coarsened factors\label{app:coarsened}} 
+
+Returning to the notation for categorical variables in
+\ref{app:notation}, we now expand the notation to allow missing and
+coarsened values. As before, let $V_{ij}$ denote
+the $j$th categorical variable for observational unit
+$i$. The possible values for $V_{ij}$  are
+\[
+\mathbb{V}_j \; = \;
+\{ 1, 2, \ldots, \#\mathbb{V}_j \}.
+\]
+Members of $\mathbb{V}_j$ are called base-level codes;
+these are all the possible responses that would be seen if there were
+no missing or coarsened data.
+
+Let $V^*_{ij}$ denote a coarsened version of $V_{ij}$. The
+possible values of $V^*_{ij}$ lie in the expanded set
+\[
+\mathbb{V}^*_j \; = \;
+\{ 1, 2, \ldots, \#\mathbb{V}_j, 
+\ldots, \#\mathbb{V}^*_j \},
+\]
+where $\#\mathbb{V}^*_j > \#\mathbb{V}_j$.
+The extra codes not found in $\mathbb{V}_j$,
+\[
+\mathbb{V}^*_j \setminus \mathbb{V}_j \,=\, \{
+\#\mathbb{V}+1, \ldots, \#\mathbb{V}^*_j\},
+\]
+are called coarse-level codes. 
+
+If $V^*_{ij}$ happens to be one of the base-level codes, then $V_{ij}$
+is equal to $V^*_{ij}$,
+\begin{eqnarray}
+V^*_{ij} \,= \,1 & \Rightarrow & V_{ij} \,=\,1, \nn\\
+& \vdots & \nn\\
+V^*_{ij} \,= \#\mathbb{V}_j & \Rightarrow & V_{ij} \,=\,\#\mathbb{V}_j.
+\nn
+\end{eqnarray}
+However, if $V^*_{ij}$ happens to be one of the coarse-level codes,
+the exact value of $V_{ij}$ cannot be deduced from it. In that case,
+$V_{ij}$ is known to lie within a subset of the base-level codes, a
+set denoted by ${\cal M}_j(V^*_{ij})$. That is,
+\[
+V^*_{ij} \, =\, v^* \; \Rightarrow \;
+V_{ij} \, \in \, {\cal M}_j(v^*),
+\]
+where ${\cal M}_j$ is the mapping, a one-to-many relation
+that maps elements of $\mathbb{V}^*$ onto non-empty subsets of
+$\mathbb{V}_j$. We use the last coarse-level code
+to denote a traditional missing value,
+\[
+{\cal M}_j(v^*) \, = \,\mathbb{V}_j
+\;\;\mbox{when}\; v^*\,=\,\#\mathbb{V}^*_j.
+\]
+As the number of base-level codes increases, the number of possible
+coarse-level codes expands rapidly. In practice, we do not need
+to create a coarse-level code for every possible subset of the base-level
+codes, but only for groupings that arise in a given application.
+
+For examples of coarsened categorical variables and information on how
+the \texttt{cvam} package creates and stores them, see the
+accompanying vignette \textit{Understanding Coarsened Factors in
+\texttt{cvam}}. 
+
+Consider now a vector of $J$ coarsened variables
+$\bV^*_i=(V^*_{i1},\ldots,V^*_{iJ})$, a coarsened version of
+$\bV_i=(V^*_{i1},\ldots,V_{iJ})$. Let $\bv^*=(v^*_1,\ldots,v^*_J)$
+denote a possible value for $\bV^*_i$. The set of all possible
+values for $\bV^*_i$ is
+\[
+\mathbb{V}^* \,=\,
+\mathbb{V}^*_1\,\times\,\mathbb{V}^*_2\,\times\,\cdots\,\times\,
+\mathbb{V}^*_J\,=\,\prod_{j=1}^J\mathbb{V}^*_j.
+\]
+This set can become very large, with $\#\mathbb{V}^* >> \#\mathbb{V}$. 
+The \texttt{cvam} function never enumerates $\mathbb{V}^*$ or creates
+any tables corresponding to $\mathbb{V}^*$
+but only work with the elements of $\mathbb{V}^*$ that are seen in the
+rows of the 
+grouped or ungrouped data frame supplied to \texttt{cvam} through its
+\texttt{data} argument.  Observing $\bV^*_i=\bv^*$ implies that
+the uncoarsened version $\bV_i$ lies within a known subset of
+$\mathbb{V}$. Specifically,
+\[
+\bV^*_i \,=\, \bv^* \; \Rightarrow \;
+\bV_i \, \in \, {\cal M}(\bv^*),
+\]
+where ${\cal M}$ is the one-to-many mapping function
+\[
+{\cal M}(\bv^*) \, = \,
+{\cal M}_1(v^*_1) \, \times \,
+{\cal M}_2(v^*_2) \, \times \,
+\cdots \, \times \, {\cal M}_J(v^*_J)
+\]
+
+\section{Seen, true, and augmented data\label{app:mfSeen}}
+
+The data supplied to \texttt{cvam}, whether given as microdata or in a
+grouped data frame, are aggregated into a vector of coarsened-data
+integer frequencies
+\[
+\mbox{\boldmath $f$}^* \,=\, ( f^*_{\bvsub^*} \,:\,
+\bv^* \in \mathbb{V}^* ),
+\]
+where $f^*_{\bvsub^*}$ is the number of sample units $i=1,\ldots,N$
+for which $\bV^*_i=\bv^*$. These frequencies, and the their
+corresponding coarsened-data response patterns (i.e., the unique
+values of $\bv^*$ appearing in the supplied dataset), are called the
+seen data and are stored by \texttt{cvam} in an object called
+\texttt{mfSeen}. This model frame has $\#\mathbb{V}^*$ rows, whose
+ordering is determined automatically by the ordering of
+the factor variables appearing in the model formula. The columns of
+\texttt{mfSeen} 
+include each of the variables in the model as a coarsened factor, plus
+a variable named \texttt{freq} to store $\mbox{\boldmath $f$}^*$.
+The seen data can be retrieved by calling \texttt{cvam} with the
+argument \texttt{method="mfSeen"}.
+
+Another model frame, called the true data or \texttt{mfTrue},
+has $\#\mathbb{V}$ rows. This frame enumerates the full set of
+complete-data patterns $\bv\in\mathbb{V}$, including any
+structural-zero cells. The columns of \texttt{mfTrue} include each of
+the variables in the model as an ordinary non-coarsened factor, plus a 
+variable named \texttt{freq} to store $\mbox{\boldmath $f$}$. 
+If the data supplied to \texttt{cvam} has missing or coarsened
+values, the elements of $\mbox{\boldmath $f$}$ are unknown and 
+must be predicted, which happens during a model-fitting
+procedure. Before a model is fit, \texttt{mfTrue} can be retrieved by
+calling \texttt{cvam} with the argument \texttt{method="mfTrue"}; this
+returns a data frame in which \texttt{freq} is filled with \texttt{NA}
+values. After a model has been fit, the true data can be retrieved
+from the resulting \texttt{cvam} object by calling
+\texttt{get.mfTrue}; in that case, \texttt{freq} will be populated
+with predicted true frequencies.
+
+The relationship between the seen data and the true data is determined
+by another set of frequencies. Let $F_{\bvsub^*,\bvsub}$ denote the unobserved
+portion of $f^*_{\bvsub^*}$ that belongs to cell $\bv$ of the
+complete-data table, and let
+\[
+\mbox{\boldmath $F$}\,=\,
+(F_{\bvsub^*,\bvsub} \,:\,
+\bv^*\in\mathbb{V}^*, \bv\in\mathbb{V} )
+\]
+be the array of frequencies in the table that cross-classifies
+the $N$ sample units by their values of $\bV^*_i$ and $\bV_i$. 
+This array is called the augmented data.
+ When summed
+over its first subscript, it generates
+the true frequencies,
+\[
+\sum_{\bvsub^*\in\mathbb{V}^*} F_{\bvsub^*,\bvsub}\,=\,
+f_\bvsub,
+\]
+and when summed over its second subscript, it reproduces the seen
+frequencies,
+\[
+\sum_{\bvsub\in\mathbb{V}} F_{\bvsub^*,\bvsub}\,=\,
+\sum_{\bvsub\in{\cal M}(\bvsub^*)} \!\! F_{\bvsub^*,\bvsub}\,=\,
+f_{\bvsub^*}.
+\]
+With $\#\mathbb{V}^*\times\#\mathbb{V}$ cells, 
+$\mbox{\boldmath $F$}$ is
+potentially huge. It is also very sparse, because $F_{\bvsub^*,\bvsub}
+= 0$ whenever $\bv\notin{\cal M}(\bv^*)$. The array is never
+actually formed by \texttt{cvam}, but individual nonzero elements are
+repeatedly predicted and discarded during a modeling run.
+
+The augmented-data array was introduced by
+\cite{baker1994multinomial}, who discussed applying
+product-multinomial and Poisson models to its elements.
+In \texttt{cvam}, we model $\mbox{\boldmath $f$}$ rather than 
+$\mbox{\boldmath $F$}$. This strategy is appropriate if 
+the coarsened data are coarsened at random (CAR), and if the
+parameters of the unspecified coarsening mechanism and the true-data
+model are distinct \citep{heitjan1991ignorability}.
+
+\section{EM algorithm for coarsened categorical data\label{app:EM}}
+
+If there were no missing or coarsened values, we would fit log-linear
+models directly to the true frequencies $\mbox{\boldmath $f$}$. Omitting
+constants that do not involve $\bmu$,
+the surrogate-Poisson loglikelihood function based on
+the true data is 
+\begin{equation}
+l^A(\bmu\,|\,\mbox{\boldmath $f$})
+\, = \, -\,\mu_+\,+\,
+\sum_{\bvsub\in\mathbb{V}}
+f_\bvsub \log \mu_{\bvsub} ,
+\label{eq:augLogLik}
+\end{equation}
+where $\mu_+ = \sum_{\bvsub\in\mathbb{V}}$.
+The superscipt `$A$' stands for augmented. This function
+depends on the augmented data $\mbox{\boldmath $F$}$ through its
+margin $\mbox{\boldmath $f$}$, and we refer to it as the
+augmented-data loglikelihood.
+
+When $\mbox{\boldmath $f$}$ is not fully observed, inferences must be
+based on the seen frequencies $\mbox{\boldmath
+$f$}^*$. \cite{baker1994multinomial} describes surrogate-Poisson
+likelihood functions for incomplete-data problems based on a
+multinomial distribution over the non-structural zero cells of
+$\mbox{\boldmath $F$}$. 
+Using results from \cite{baker1994multinomial}, and assuming 
+the coarsening mechanism is ignorable, an appropriate
+surrogate-Poisson loglikelihood function based on 
+$\mbox{\boldmath $f$}^*$ is
+\begin{equation}
+l(\bmu\,|\,\mbox{\boldmath $f$}^*)
+\, = \, -\,\mu_+\,+\, \sum_{\bvsub^*\in\mathbb{V}^*}
+f^*_{\bvsub^*} \log \tau_{\bvsub^*},
+\label{eq:obsLogLik}
+\end{equation}
+where
+\[
+\tau_{\bvsub^*}\,=\,
+\sum_{\bvsub\in {\cal M}(\bvsub^*)}\!\! \mu_\bvsub.
+\]
+We refer to $l(\bmu\,|\,\mbox{\boldmath $f$}^*)$ as the observed-data
+loglikelihood. 
+
+The EM algorithm is an iterative procedure for maximizing
+$l(\bmu\,|\,\mbox{\boldmath $f$}^*)$ by repeatedly maximizing a function
+that looks like $l^A(\bmu\,|\,\mbox{\boldmath $f$})$. At each
+iteration, the current estimate of the log-linear coefficients
+$\hat{\bbeta}^{(t)}$ is updated in two steps. In the Expectation or
+E-step, we obtain the function
+\begin{equation}
+Q^{(t)}(\bbeta)
+\,=\, E\,[
+\,l^A(\bmu\,|\,\mbox{\boldmath $f$}) \,|\,
+\mbox{\boldmath $f$}^*,\bbeta=\hat{\bbeta}^{(t)} \,],
+\label{eq:Estep}
+\end{equation}
+and in the M-step, we maximize that function
+to obtain the new estimate,
+\begin{equation}
+\hat{\bbeta}^{(t+1)}\,=\,
+\argmax_{\bbeta} \, Q^{(t)}(\bbeta)
+\label{eq:Mstep}
+\end{equation}
+
+To perform the E-step, note that the augmented-data loglikelihood is
+a linear function of the elements of $\mbox{\boldmath $f$}$,
+so its expectation is obtained by replacing $\mbox{\boldmath $f$}$ with
+its expected value given $\mbox{\boldmath $f$}^*$ under the assumed
+value for $\bbeta$ or $\bmu$. Under a multinomial model for the
+non-structural zero 
+elements of $\mbox{\boldmath $F$}$, the conditional distribution of 
+$\mbox{\boldmath $F$}$ given $\mbox{\boldmath $f$}^*$ becomes
+product-multinomial. That is, each slice
+\[
+\mbox{\boldmath $F$}_{\bvsub^*\!,\,\mbox{\bfseries\scriptsize :}}
+\,=\,
+(\,\mbox{\boldmath $F$}_{\bvsub^*,\bvsub} :
+\bv\in{\cal M}(\bv^*)\,)
+\]
+is distributed as
+\begin{equation}
+\mbox{\boldmath $F$}_{\bvsub^*\!,\,\mbox{\bfseries\scriptsize :}}
+\,|\,
+\mbox{\boldmath $f$}^*_{\bvsub^*},\bmu
+\,\sim\,
+\mbox{Mult}(\mbox{\boldmath $f$}^*_{\bvsub^*}, \bxi_{\bvsub^*})
+\label{eq:disnEstep}
+\end{equation}
+independently for $\bv^*\in\mathbb{V}^*$, where $\bxi_{\bvsub^*}$ is the
+vector with elements $\xi_{\bvsub^*,\bvsub} =
+\mu_\bvsub / \tau_{\bvsub^*}$ for $\bv\in{\cal M}(\bv^*)$. The
+expected value of $\mbox{\boldmath $f$}$ under this
+product-multinomial distribution, which we denote by 
+$\hat{\mbox{\boldmath $f$}}=
+E(\mbox{\boldmath $f$}\,|\,\mbox{\boldmath $f$}^*, \bmu)$,
+has elements $\hat{f}_\bvsub = 
+\sum_{\bvsub^*\in\mathbb{V}^*} \hat{F}_{\bvsub^*,\bvsub}$, where
+\begin{equation}
+\hat{F}_{\bvsub^*,\bvsub}\,=\,
+I(\,\bv\in{\cal M}(\bv^*)\,)\,f^*_{\bvsub^*}
+\xi_{\bvsub^*,\bvsub} .
+\label{eq:EstepFhat}
+\end{equation}
+The E-step accumulates $\hat{\mbox{\boldmath $f$}}$
+by cycling over the rows of the seen
+data, computing $\tau_{\bvsub^*}$ for that row, then incrementing the
+each element $\hat{f}_\bvsub$ for $\bv\in{\cal M}(\bv^*)$ 
+by the amount $f^*_{\bvsub^*}\mu_\bvsub / \tau_{\bvsub^*}$. While
+performing this E-step, \texttt{cvam} also computes the observed-data
+loglikelihood (\ref{eq:obsLogLik}) under the current estimate of
+$\bbeta$ or $\bmu$, which comes at essentially no cost.
+
+Once the E-step has been completed, the M-step fits the log-linear
+model by the NR procedure described in \ref{app:NR}, with
+$\mbox{\boldmath $f$}$ replaced by $\hat{\mbox{\boldmath $f$}}$, to
+obtain the new estimate for $\bbeta$. If
+the model is saturated and \texttt{cvam} is called with
+\texttt{saturated=TRUE}, the coefficients $\bbeta$ are not defined,
+and the M-step sets the new estimate of $\bmu$ to
+$\hat{\mbox{\boldmath $f$}}$. 
+
+Observations that are entirely missing (i.e., rows of the seen data
+that have missing values for all modeled variables) contribute no
+information to the observed-data loglikelihood function
+(\ref{eq:obsLogLik}), except for driving up the estimate of
+$\mu_+$. Including these observations can increase the rates of
+missing information and slow the convergence of EM
+\citep{schafer1997analysis}. By default, \texttt{cvam} excludes these
+observations from the model-fitting procedure but restores them
+afterward when reporting the predicted true frequencies
+$\hat{\mbox{\boldmath $f$}}$ in the model frame \texttt{mfTrue}. To
+include these cases in the model fitting, set the control parameter
+\texttt{excludeAllNA} to \texttt{FALSE} in the \texttt{control}
+argument.
+
+\section{Prior information\label{app:logP}}
+
+Prior distributions implemented in \texttt{cvamPrior} allow the user
+to incorporate prior information as
+\begin{itemize}
+\item a flattening constant, a positive value that is divided equally
+among all non-structural zero cells of the complete-data table, and
+\item prior nuggets, which take the form of coarsened-data frequencies
+and are ascribed to groups of cells (slices of the table).
+\end{itemize}
+The result is a kind of data-augmentation prior (DAP) in which the
+flattening constant and nuggets contribute additively to the
+objective function in the same way that seen frequencies
+$\mbox{\boldmath $f$}^*$ contribute to the observed-data
+loglikelihood. 
+Including prior information, the objective function becomes
+\begin{equation}
+\log P(\bmu)
+\,=\, 
+\sum_{\bv\in\mathbb{V}} k\log\mu_\bv
+\,+\,\sum_{\bvsub^*\in\mathbb{P}}
+f^*_{\bvsub^*}\log\tau_{\bvsub^*}
+\,+\,l(\bmu\,|\,\mbox{\boldmath $f$}^*),
+\label{eq:logP}
+\end{equation}
+where $k$ is the per-cell flattening constant, 
+$\mathbb{P}$ is a set of coarsened-data cells over which the prior nuggets
+are defined, and $f^*_{\bvsub^*}$ denotes a prior nugget if
+$\bv^*\in\mathbb{P}$ or a seen frequency if $\bv^*\in\mathbb{V}^*$.
+The indices for cells in $\mathbb{P}$ and their associated prior
+nuggets are stored in a model frame called \texttt{mfPrior}, which can be
+accessed by calling \texttt{cvam} with \texttt{method="mfPrior"}.
+
+For log-linear models fit with
+\texttt{saturated=FALSE}, the user can also specify
+a ridge factor, which acts upon the coefficients in a manner similar
+to ridge regression, shrinking the estimated $\bbeta$ 
+toward $\bzero=(0,\ldots,0)^\top$ and stabilizing its estimated
+covariance matrix. A ridge factor $r>0$ adds information equivalent to
+a multivariate normal prior density for $\bbeta$ centered at $\bzero$
+with prior covariance matrix $r^{-1}\bI$. With a ridge factor, the
+objective function becomes
+\begin{equation}
+\log P(\bbeta)
+\,=\, -\,\frac{r}{2}\,\bbeta^\top\bbeta\,+\,
+\sum_{\bv\in\mathbb{V}} k\log\mu_\bv
+\,+\,\sum_{\bvsub^*\in\mathbb{P}}
+f^*_{\bvsub^*}\log\tau_{\bvsub^*}
+\,+\,l(\bmu\,|\,\mbox{\boldmath $f$}^*).
+\label{eq:logPbeta}
+\end{equation}
+If a saturated model if fit with the option \texttt{saturated=TRUE},
+the coefficients $\bbeta$ are not defined, and the ridge factor is ignored.
+
+In the EM algorithm, (\ref{eq:logP}) and (\ref{eq:logPbeta}) are not
+treated as the logarithms 
+of an actual density, but as a scale-invariant objective function that
+takes the same value regardless of whether the parameters are
+expressed as $\bpi$, $\bmu$ or $\bbeta$. The E-step treats the
+flattening constant and prior nuggets as actual data, apportioning
+them to the cells of the complete-data table and making the elements
+of $\hat{\mbox{\boldmath $f$}}$ larger. The ridge factor is applied in
+the M-step, contributing a term $-r\,\bbeta$ to 
+the score vector and $-r\,\bI$ to the Hessian matrix described in
+\ref{app:NR}. After the EM run, 
+$\hat{\mbox{\boldmath $f$}}$ is recomputed under the final parameter
+estimates without the flattening constant or nuggets and reported as
+the variable \texttt{freq} in \texttt{get.mfTrue}.
+
+\section{Standard errors for coefficients\label{app:SE}}
+
+After running the EM algorithm for a log-linear model, \texttt{cvam}
+computes an estimated covariance matrix for $\bbeta$ based on the
+observed second derivatives of $\log P$,
+\[
+\hat{V}(\hat{\bbeta})\,=\,
+\left( -\,
+\frac{\partial^2\log P}{\partial\bbeta\,\partial\bbeta^\top}
+\right)^{-1},
+\]
+where the derivatives are evaluated at the final estimate for
+$\bbeta$. The inverse is computed using a Cholesky
+factorization and fails if $\log P$ is not concave.
+To compute the derivatives, we temporarily put aside the ridge factor
+and use a chain rule 
+\[
+\frac{\partial\log P}{\partial\bbeta}
+\,=\,
+\left(
+\frac{\partial\bmu\,}{\,\partial\bbeta^\top}
+\right)^\top
+\left(
+\frac{\partial\log P}{\partial\bmu^\top}
+\right).
+\]
+But $\partial\mu_\bvsub/\partial\beta_j = \mu_\bvsub\, x_{\bvsub,j}$, so
+$\partial\bmu/\partial\bbeta^\top = \bW\!\bX$, where $\bW=\mbox{diag}(\bmu)$.
+With some algebra, we can show that $\partial\log P/\partial\mu_\bv =
+(\hat{f}_\bvsub - \mu_\bvsub) / \mu_\bvsub$, where $\hat{f}_\bvsub$ is
+the predicted true frequency for cell $\bv$ from the E-step of EM,
+including the flattening constant and any contributions from prior
+nuggets. It follows that $\partial\log P/\partial\bmu\,=\,\bW^{-1}
+(\hat{\mbox{\boldmath $f$}} - \bmu)$ and
+\begin{equation}
+\frac{\partial\log P}{\partial\bbeta}\,=\,
+\bX^\top (\hat{\mbox{\boldmath $f$}} - \bmu),
+\label{eq:d1logP}
+\end{equation}
+which vanishes at the EM solution. Applying the chain rule again, the
+second derivative can be written as
+\begin{equation}
+\frac{\partial^2\log P}{\partial\bbeta\,\partial\bbeta^\top}
+\,=\,
+\sum_{\bvsub\in\mathbb{V}}
+\left( \frac{\partial\log P}{\partial\mu_\bvsub} \right)
+\left( \frac{\partial^2\mu_\bvsub}{\partial\bbeta\partial\bbeta^\top}
+\right) \,+\,
+\left( \frac{\partial\bmu}{\partial\bbeta^\top} \right)^{\!\!\top} \!\!
+\left( \frac{\partial^2\log P}{\partial\bmu\partial\bmu^\top} \right)
+\left( \frac{\partial\bmu}{\partial\bbeta^\top} \right).
+\label{eq:d2chainrule}
+\end{equation}
+But $\partial^2\log P/\partial\beta_j\,\partial\beta_k = 
+\mu_\bvsub\,x_{\bvsub,j}\,x_{\bvsub,k}$, so
+$\partial^2\mu_\bvsub/\partial\bbeta\,\partial\bbeta^\top =
+\mu_\bvsub\,\bx_{\bvsub}\,\bx_{\bvsub}^\top$, and the first term in
+(\ref{eq:d2chainrule}) becomes
+\[
+\sum_{\bvsub\in\mathbb{V}}
+\left( \frac{\partial\log P}{\partial\mu_\bvsub} \right)
+\left( \frac{\partial^2\mu_\bvsub}{\partial\bbeta\partial\bbeta^\top}
+\right) \,=\,
+\bX^\top \mbox{diag}( \hat{\mbox{\boldmath $f$}} - \bmu ) \,\bX,
+\]
+which also vanishes at the EM solution. With some algebra, the second
+term in (\ref{eq:d2chainrule}) can be written as
+\[
+\left( \frac{\partial\bmu}{\partial\bbeta^\top} \right)^{\!\!\top} \!\!
+\left( \frac{\partial^2\log P}{\partial\bmu\partial\bmu^\top} \right)
+\left( \frac{\partial\bmu}{\partial\bbeta^\top} \right)\,=\,
+\bX^\top\! \bM \bX,
+\]
+where
+\[
+\bM\,=\, - \, k \,\bI \,-\,
+\sum_{\bvsub^*\in\mathbb{P}}\bM_{\bvsub^*}
+\,-\,
+\sum_{\bvsub^*\in\mathbb{V}^*}\bM_{\bvsub^*},
+\]
+where $\bI$ is the $\#\mathbb{V}\times\#\mathbb{V}$ identity matrix, and
+$\bM_{\bvsub^*}$ is the matrix with element
+\begin{equation}
+\hat{F}_{\bvsub^*,\bvsub} \, \hat{F}_{\bvsub^*,\bvsub^\prime} /
+f^*_{\bvsub^*}
+\label{eq:elementM}
+\end{equation}
+in position $(\bv,\bv^\prime)$ and zeros
+elsewhere. The matrices $\bM_{\bvsub^*}$ are large and very sparse,
+because (\ref{eq:elementM}) becomes zero whenever
+$\bv\notin{\cal M}(\bv^*)$ or $\bv^\prime\notin{\cal M}(\bv^*)$. In
+\texttt{cvam}, these matrices are never formed; rather, we cycle over
+the cells of $\mathbb{P}$ and $\mathbb{V}^*$ and accumulate $\bM\bX$
+in a workspace of the same size as $\bX$. 
+
+These formulas do not account for a ridge factor.
+If a ridge factor $r>0$ is
+present, the term $-\,r\,\bbeta$ is added to the first derivative, and
+the term $-\,r\,\bI$ is added to the second derivative.
+
+\section{Estimated probabilities and standard errors\label{app:estSE}}
+
+The function \texttt{cvamEstimate} computes tables of marginal and
+conditional probabilities from the estimated cell means
+$\hat{\bmu}$. The formula given to \texttt{cvamEstimate} partitions the
+model variables into
+$\bV_i=(\bA_i,\bB_i,\bC_i)$, where $\bA_i$ denotes the variables to be
+conditioned on, $\bB_i$ denotes the variables for which probabilities
+are requested, and $\bC_i$ denotes variables to be marginalized
+over. With respect to the \texttt{cvamEstimate} formula, 
+\begin{itemize}
+\item $\bA_i$ consists of all variables on the right-hand side of
+`\texttt{|}', 
+\item $\bB_i$ consists of all variables on the left-hand side of
+`\texttt{|}', and 
+\item $\bC_i$ consists of all variables from the model formula
+that are absent from the \texttt{cvamEstimate} formula.
+\end{itemize}
+The set $\bB_i$ must include any variables that the model regarded
+as fixed, otherwise \texttt{cvamEstimate} reports an error. Writing a
+possible value for $\bV_i$ as $\bv=(\ba,\bb,\bc)$, we may identify
+cells of true data frame by this triple index, as in
+\[
+\pi_{\ba,\bb,\bc}\,=\,P(\bA_i=\ba,\bB_i=\bb,\bC_i=\bc).
+\] 
+The probabilities requested by \texttt{cvamEstimate} are $P(\bB_i=\bb
+\,|\,\bA_i=\ba)$ for all $\ba\in\mathbb{A}$ and 
+$\bb\in\mathbb{B}$, which can be written as
+\[
+\pi^{(B\,|\,A)}_{\basub,\bbsub,+}\,=\,\sum_{\bcsub\in\mathbb{C}}
+\frac{\mu_{\basub,\bbsub,\bcsub}}{\mu_{\basub,+,+}} .
+\]
+Using the delta method \citep{agresti2013categorical}, an estimated
+variance for $\hat{\pi}^{(B\,|\,A)}_{\basub,\bbsub,+}$ is
+\begin{equation}
+\hat{V}(\hat{\pi}^{(B\,|\,A)}_{\basub,\bbsub,+})
+\,=\,\left(
+\frac{\partial\,\pi^{(B\,|\,A)}_{\basub,\bbsub,+}}{\partial\bbeta^\top}
+\right)^{\!\!\top}
+\hat{V}(\hat{\bbeta})
+\left(
+\frac{\partial\,\pi^{(B\,|\,A)}_{\basub,\bbsub,+}}{\partial\bbeta^\top}
+\right),
+\label{eq:deltamethod}
+\end{equation}
+where the derivatives are evaluated at $\bbeta=\hat{\bbeta}$. We
+compute this as $\hat{V}(\hat{\pi}^{(B\,|\,A)}_{\basub,\bbsub,+}) = 
+\norm{\bD^{-1}\bd_{\basub,\bbsub}\,}^2$, where $\bD$ is the
+lower-triangular Cholesky 
+factor of $-\,\partial^2\log P/\partial\bbeta\,\partial\bbeta^\top$, and
+\begin{equation}
+\bd_{\basub,\bbsub}\,=\,
+\left(\frac{\partial\bmu}{\partial\bbeta^\top}\right)^{\!\!\top}
+\left(
+\frac{\partial\,\pi^{(B\,|\,A)}_{\basub,\bbsub,+}}{\partial\bmu}
+\right).
+\label{eq:dvec}
+\end{equation}
+The first term in (\ref{eq:dvec}) is 
+$\partial\bmu/\partial\bbeta^\top = \bW\!\bX$, where
+$\bW=\mbox{diag}(\bmu)$. For the second term, note that
+\[
+\frac{\partial\,\pi^{(B\,|\,A)}_{\basub,\bbsub,+}}{\partial
+\mu_{\basub^\prime,\bbsub^\prime,\bcsub^\prime}}\,=\,0
+\;\;\;\mbox{if}\;\;\;\ba^\prime\neq\ba.
+\]
+If $\ba^\prime=\ba$,  the derivative is
+\[
+\frac{\partial\,\pi^{(B\,|\,A)}_{\basub,\bbsub,+}}{\partial
+\mu_{\basub,\bbsub^\prime,\bcsub^\prime}}\,=\,
+\frac{1}{\mu_{\basub,+,+}}\,
+\left( I(\bb^\prime=\bb)\,-\,\pi^{(B\,|\,A)}_{\basub,\bbsub,+} \right),
+\]
+which is the same for all $\bc^\prime$. Putting these together, the
+elements of $\bd_{\basub,\bbsub}$ become
+\[
+\bd_{\basub,\bbsub,j}\,=\,
+\sum_{\bbsub^\prime\in\mathbb{B}} \sum_{\bcsub^\prime\in\mathbb{C}}
+x_{\basub,\bbsub^\prime,\bcsub^\prime,j}\,
+\pi^{(B,C\,|\,A)}_{\basub,\bbsub^\prime,\bcsub^\prime}
+\,\left( I(\bb^\prime=\bb)\,-\,\pi^{(B\,|\,A)}_{\basub,\bbsub,+} \right)
+\]
+for $j=1,\ldots,p$, where
+$\pi^{(B,C\,|\,A)}_{\basub,\bbsub,\bcsub}=
+\mu_{\basub,\bbsub,\bcsub}/\mu_{\basub,+,+}$.  
+
+\section{Markov chain Monte Carlo\label{app:MCMC}}
+
+\subsection{Data augmentation}
+
+MCMC algorithms for incomplete multivariate categorical data were
+described by \cite{schafer1997analysis}, including a stochastic
+version of iterative proportional fitting called Bayesian
+IPF. For our purposes, it is more natural to use methods that are not
+related to IPF but focus on the model matrix $\bX$
+and the log-linear coefficients $\bbeta$, except for models that are
+specifically fit as saturated with the option \texttt{saturated=TRUE}.
+
+By default, when the \texttt{cvam} function is called with
+\texttt{method="MCMC"}, it runs a data-augmentation (DA) procedure that 
+resembles EM. Let $\bbeta^{(t)}$  denote the simulated value of 
+$\bbeta$ at iteration $t$, and let $\bmu^{(t)}$ denote the
+corresponding value of $\bmu$. In DA, generating the next iterate
+$\bbeta^{(t+1)}$ involves
+\begin{itemize}
+\item an Imputation or I-step, which draws a table of true
+frequencies from its predictive distribution
+given the seen frequencies and the current
+simulated parameters,
+\begin{equation}
+\mbox{\boldmath $f$}^{(t)} \, \sim\,
+P(\mbox{\boldmath $f$} \,|\, \mbox{\boldmath $f$}^* \!,\,
+\bmu=\bmu^{(t)}),
+\label{eq:Istep}
+\end{equation}
+followed by
+\item a Posterior or P-step, which draws a new set of parameters given
+the simulated true frequencies,
+\begin{equation}
+\bbeta^{(t+1)} \, \sim\,
+P( \bbeta \,|\, \mbox{\boldmath $f$}=\mbox{\boldmath $f$}^{(t)} ).
+\label{eq:Pstep}
+\end{equation}
+\end{itemize}
+Choosing a starting value $\bbeta^{(0)}$ and repeating these two steps
+creates a Markov chain $\bbeta^{(1)}\!, \bbeta^{(2)}\!, \ldots$ whose
+stationary distribution is the desired posterior
+$P(\bbeta\,|\,\mbox{\boldmath $f$}^*)$. The default $\bbeta^{(0)}$
+depends on which S3 method is invoked. If the \texttt{cvam} function is
+called with a model formula as its first argument, then
+\texttt{cvam.formula} chooses default starting values in the
+center of the parameter space, consistent with cell means that are
+equal across cells. If the \texttt{cvam} is applied to a \texttt{cvam}
+object, then \texttt{cvam.cvam} sets $\bbeta^{(0)}$ to the final value
+of $\bbeta$ held in the \texttt{cvam} object, regardless of whether
+that value came from \texttt{method="EM"}, \texttt{"MCMC"}, or
+\texttt{"approxBayes"}.
+
+The I-step of DA is computationally similar to the E-step described in
+\ref{app:EM} and \ref{app:logP}, except that the prior nuggets and
+seen frequencies are apportioned to cells of the complete-data table
+in a random fashion. The true frequency in cell
+$\bv$, including the contributions of the data-augmentation prior
+(DAP), is
+\begin{equation}
+f_{\bvsub}\,=\, k\,+\,
+\sum_{\bvsub^*\in\mathbb{P}} F_{\bvsub^*,\bvsub} \,+\,
+\sum_{\bvsub^*\in\mathbb{V}^*} F_{\bvsub^*,\bvsub},
+\label{eq:truefreqwithDAP}
+\end{equation}
+where $k$ is the flattening constant, $F_{\bvsub^*,\bvsub}$ is the
+portion of the coarsened-data frequency $f^*_{\bvsub^*}$ that belongs to
+cell $\bv$, $\mathbb{P}$ is the set of coarsened-data cells in the
+frame \texttt{mfPrior} of prior nuggets, and
+$\mathbb{V}^*$ is the set of coarsened-data cells in the
+frame \texttt{mfSeen} of aggregated 
+user-supplied data. For each $\bv^*$ in $\mathbb{P}$ and
+$\mathbb{V}^*$, the integer vector $\mbox{\boldmath $F$}_{\bvsub^*,
+\mbox{\bfseries\scriptsize :}}$ is drawn from the multinomial
+distribution (\ref{eq:disnEstep}), and the contributions are
+accumulated into $f_{\bvsub}$.
+
+For the P-step, we simulate a draw of $\bbeta$ from the augmented-data
+posterior 
+\begin{equation}
+P(\bbeta\,|\,\mbox{\boldmath $f$})\,\propto\,
+\exp \left(-\,\frac{r}{2}\,\bbeta^\top\bbeta\,
+-\,\mu_+\,+\,\sum_{\bvsub\in\mathbb{V}}
+f_\bvsub\log\mu_\bvsub
+\right),
+\label{eq:densPstep}
+\end{equation}
+which is interpreted as a density for $\bbeta$ with respect to Lebesgue
+measure over $\mathbb{R}^p$. Because
+$P(\bbeta\,|\,\mbox{\boldmath $f$})$ is difficult to simulate directly, we
+replace an exact draw from this distribution with one step of a
+Metropolis-Hastings (MH) algorithm that has
+$P(\bbeta\,|\,\mbox{\boldmath $f$})$ as its target, so that the DA
+algorithm becomes an example of 
+Metropolis-Hastings within Gibbs \citep{gamerman2006markov}. Our
+MH procedure draws a candidate $\bbeta^*$  from the
+multivariate $t$ proposal
+\begin{equation}
+\bbeta^*\,\sim \, t_\nu(\,c(\bbeta^{(t)}), \,\bS(\bbeta^{(t)})\,),
+\label{eq:MAHAproposal}
+\end{equation}
+where
+\begin{eqnarray}
+c(\bbeta) & = & 
+\bbeta \, +\, \delta\,\left[\, -\bH(\bbeta)\, \right]^{-1}
+\nabla\log P(\bbeta\,|\,\mbox{\boldmath $f$}),
+\nn\\
+\bS(\bbeta) & = & \epsilon^2 
+\left( \frac{\nu + p}{\nu} \right)\,
+\left[\, -\bH(\bbeta)\,
+  \right]^{-1}, \nn
+\end{eqnarray}
+where $\nabla$ denotes the gradient, and $H$ is the
+second derivative or Hessian matrix of $\log
+P(\bbeta\,|\,\mbox{\boldmath $f$})$ with respect to $\bbeta$.
+In this notation, 
+$t_\nu(\bc,\bS)$ denotes a multivariate $t$
+distribution centered at $\bc$ with scale matrix $\bS$ and $\nu$
+degrees of freedom, The proposal density is
+is
+\[
+q(\bbeta^*\,|\,\bbeta^{(t)})\,\propto\,\left[
+1\,+\,\frac{1}{\nu}\,(\bbeta^*-\bc)^\top \bS^{-1} 
+(\bbeta^*-\bc)\right]^{-\left(\frac{\nu+p}{2}\right)}
+\]
+with $\bc=\bc(\bbeta^{(t)})$ and $\bS=\bS(\bbeta^{(t)})$.
+
+The quantities $\nu$, $\delta$, and $\epsilon$ are tuning constants. 
+When $\delta=1$, the proposal is centered at the estimate of $\bbeta$
+obtained by taking one step of Newton-Raphson from $\bbeta^{(t)}$, and
+when $\epsilon=1$, we are matching the curvature of the log-proposal
+density to that of $\log P(\bbeta^{(t)}\,|\,\mbox{\boldmath $f$})$. 
+A version of this procedure with $(\nu,\delta,\epsilon)=(\infty,1,1)$
+was applied by \cite{gamerman1997sampling} for simulating coefficients
+in generalized linear mixed models; that method achieves an optimal
+acceptance rate of 100\% when the
+target is multivariate normal. A similar procedure was also used by
+\cite{pitt2006efficient}, who used a normal proposal centered at the
+target's mode, which in general requires multiple steps of
+Newton-Raphson, whereas ours needs only one step.
+The tuning constants should be chosen to produce low
+correlations between successive iterates of $\bbeta$. In our
+experience, $(\nu,\delta,\epsilon)=(10,0.8,0.8)$ often performs well 
+in problems where $p$ is small, and these values the current
+\texttt{cvam} default. The tuning constants are
+set by the control parameter \texttt{tuneDA}. The integer control parameter
+\texttt{stuckLimit} instructs DA to abort if MH gets stuck, i.e., if the
+candidates are rejected more than \texttt{stuckLimit} times in a row,
+which can happen in higher-dimensional problems. If MH gets
+stuck, the problem can usually be solved by increasing the degrees of
+freedom and reducing the step size and
+scale factor, setting
+\texttt{tuneDA} to, say $(100,0.4,0.4)$, 
+$(1000,0.2,0.2)$, $(1000,0.1,0.1)$, or even
+$(1000,0,0.1)$. Increasing $\nu$ and reducing
+$\delta$ and 
+$\epsilon$ causes MH to take smaller steps, which
+decreases the chance of getting stuck but increases the correlation
+between successive values of $\bbeta$.
+
+When a saturated model is fit with the option \texttt{saturated=TRUE}, 
+a different P-step is required, because the log-linear coefficients
+$\bbeta$ are not defined. For that case, we omit the ridging term
+involving $\bbeta$
+from the right-hand
+side of (\ref{eq:densPstep}) and interpret it
+as a non-normalized density for $\bmu$
+with respect to Lebesgue measure over $\mathbb{R}^{\#\mathbb{V}}$,
+which implies that
+\[
+\bmu_\bvsub \,|\,
+\mbox{\boldmath $f$} \,\sim \,
+\mbox{Gamma}(f_\bvsub + 1, 1)
+\]
+independently for $\bv\in\mathbb{V}$, where $\mbox{Gamma}(a,b)$
+denotes a gamma distribution with shape $a$ and rate $b$. This P-step
+does not rely on tuning parameters and has an acceptance rate of
+100\%. Results for a saturated model may be slightly different when
+run under \texttt{saturated=FALSE} and \texttt{saturated=TRUE},
+because the target posterior distributions differ. These differences
+will become less noticeable as the sample size $N$ grows.
+
+\subsection{Random-walk Metropolis}
+
+When \texttt{saturated=FALSE}, an alternative to DA is available that
+does not impute $\mbox{\boldmath $f$}$ at each cycle. That alternative
+is a random-walk Metropolis (RWM) algorithm with a non-normalized
+target density obtained by exponentiating the right-hand side of
+Equation (\ref{eq:logP}). The proposal distribution is
+\[
+\bbeta^*\,\sim\,t_\nu(\, \bbeta^{(t)}, \,\epsilon^2\,
+\hat{V}(\hat{\bbeta})\,),
+\]
+where $\hat{V}(\hat{\bbeta})$ is the asymptotic covariance matrix
+computed at the end of EM. To use this alternative procedure, set the
+control parameter \texttt{typeMCMC} to \texttt{"RWM"}. The tuning
+constants  $(\nu,\epsilon)$, which default to $(1000,0.1)$, are set by
+the control parameter \texttt{tuneRWM}. If the algorithm gets stuck, 
+the problem can usually be solved by decreasing
+$\epsilon$, which will increase the acceptance rate. With RWM, an
+acceptance rate between 20\% and 40\% is desirable. 
+
+\subsection{More details of MCMC}
+
+Four additional control parameters apply regardless of which MCMC
+algorithm is used. They are:
+\begin{itemize}
+\item \texttt{iterMCMC}, which sets the number of iterations to be
+performed after the burn-in period;
+\item \texttt{burnMCMC}, which sets the number of iterations to be
+treated as a burn-in period and discarded;
+\item \texttt{thinMCMC}, which sets the thinning interval; and
+\item \texttt{imputeEvery}, which sets the imputation interval.
+\end{itemize}
+After the burn-in period, \texttt{cvam} accumulates and saves:
+\begin{itemize}
+\item a running average and a running covariance matrix from the
+output stream of $\bbeta$. These become the default source
+for the estimated coefficients and standard errors extracted by
+\texttt{summary} and \texttt{get.coef} and the estimated covariance matrix
+extracted by \texttt{get.covMat}.
+\item a running average of the cell probabilities $\bpi$, which become
+the source of fitted values extracted by \texttt{get.fitted}.
+\item a running average of the imputed true frequencies
+$\mbox{\boldmath $f$}$, without 
+the flattening constant or any contributions from prior nuggets.
+These are reported as the variable 
+\texttt{freq} in the data frame \texttt{mfTrue}.
+\item a series containing every $k$th value of $-2$ times the
+objective function in Equation (\ref{eq:logP}), where $k$ is the
+thinning interval set by \texttt{thinMCMC}. This series can be
+extracted with \texttt{get.minus2logPSeries}.
+\item a series containing every $k$th simulated value of $\bbeta^{(t)}$, which
+can be extracted with \texttt{get.coefSeries}.
+\item if \texttt{saveProbSeries=TRUE}, a series containing every $k$th
+value of $\bpi^{(t)}$, which can be extracted with
+\texttt{get.probSeries}.
+\item every $m$th value of the imputed true frequencies $\mbox{\boldmath
+$f$}$, without the flattening constant or any contributions from prior
+nuggets, where $m$ is the imputation interval set by
+\texttt{imputeEvery}. These can be extracted with
+\texttt{get.imputedFreq}. If $m$ is sufficiently large, these can be
+regarded as proper Bayesian multiple imputations of $\mbox{\boldmath
+$f$}$ under the model.
+\end{itemize}
+
+
+\end{document}
