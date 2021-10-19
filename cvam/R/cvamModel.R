@@ -12,12 +12,6 @@ cvam.default <- function( obj, ...) {
       domain = NA )
    }
 
-cvam.cvam <- function( obj, ...) {
-   stop( gettext(
-      "Not implemented yet"),
-      domain = NA )
-   }
-
 cvamControl <- function( iterMaxEM = 500L, iterMaxNR = 50L,
    iterApproxBayes = 1L, imputeApproxBayes = FALSE,
    iterMCMC = 5000L, burnMCMC = 0L, thinMCMC = 1L, imputeEvery = 0L,
@@ -277,7 +271,9 @@ print.summary.cvamPrior <- function(x,
       ridge = prior$ridge * prior$intensity ) 
 }
 
-cvam.formula <- function( obj, data, freq, prior=cvamPrior(), 
+cvam.formula <- function( obj, data, freq, 
+   weight, subPop, stratum, cluster, nest = FALSE, 
+   prior=cvamPrior(), 
    method=c("EM", "MCMC", "approxBayes", "mfSeen",
       "mfTrue", "mfPrior", "modelMatrix"),
    control=list(), omitData=FALSE, saturated=FALSE, 
@@ -291,16 +287,36 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
    omitData <- as.logical( omitData )[1L]
    stopifnot( inherits(prior, "cvamPrior") )
    #----------------------------------
-   # get the input data model frame and frequencies
+   # get the input data model frame and frequencies / design vars
    mc <- match.call( expand.dots=FALSE )
    mc[[1]] <- quote(stats::model.frame)
-   m <- match( c("obj", "data", "freq"), names(mc), nomatch=0L )
+   m <- match( c("obj", "data", "freq", "weight", "subPop", 
+      "stratum", "cluster"), names(mc), nomatch=0L )
    mc <- mc[ c(1L,m) ]
    names(mc)[2] <- "formula"
    mc[[2]] <- theModel 
    mc$na.action <- as.name("na.pass")
    mc$drop.unused.levels <- FALSE
    mf <- eval( mc, parent.frame() )
+   if( !is.null( mf$`(weight)` ) ) {
+      if( !is.null( mf$`(freq)` ) ) stop( gettext(
+         "You cannot supply both 'freq' and 'weight'" ), domain=NA )
+      surveyMode <- TRUE
+   } else {
+      surveyMode <- FALSE
+      if( !is.null( mf$`(subPop)` ) ) warning( gettext(
+         "Argument 'subPop' is ignored, because 'weight' was not supplied" ),
+         domain=NA )
+      if( !is.null( mf$`(stratum)` ) ) warning( gettext(
+         "Argument 'stratum' is ignored, because 'weight' was not supplied" ),
+         domain=NA )
+      if( !is.null( mf$`(cluster)` ) ) warning( gettext(
+         "Argument 'cluster' is ignored, because 'weight' was not supplied" ),
+         domain=NA )
+   }
+   #----------------------------------
+   # handle frequencies, which are present even in surveyMode,
+   # even though they will be ignored by Fortran
    if( is.null( mf$`(freq)` ) ) {
       freq <- rep(1L, NROW(mf))
       freqSupplied <- FALSE
@@ -309,19 +325,94 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
       mf$`(freq)` <- NULL 
       freqSupplied <- TRUE
    }
+   if( any(is.na(freq)) ) stop( gettext(
+      "Missing values in 'freq' not allowed"), domain = NA )
    freqInt <- as.integer(freq)
    if( any( freq != freqInt ) ) warning( gettext(
-      "Some frequencies changed when integerized" ), domain=NA )
+      "Some frequencies changed when integerized" ), domain = NA )
+   #----------------------------------
+   # handle survey design variables
+   if( surveyMode ) {
+      weight <- as.numeric( mf$`(weight)` )
+      if( any( is.na( weight ) ) ) stop( gettext(
+         "Missing values in 'weight' not allowed" ), domain = NA )
+      if( any( weight < 0 ) ) stop( gettext(
+         "Negative values in 'weight' not allowed" ), domain = NA )
+      #
+      if( is.null( mf$`(subPop)` ) ) {
+         subPop <- rep( TRUE, NROW(mf) )
+         subPopInt <- rep( 1L, NROW(mf) )
+      } else {
+         subPop <- as.logical( mf$`(subPop)` )
+         if( any( is.na( subPop ) ) ) stop( gettext(
+            "Missing values in 'subPop' not allowed" ), domain = NA )
+         if( !any( subPop ) ) stop( gettext(
+	    "Variable 'subPop' is entirely FALSE" ), domain = NA )
+         subPopInt <- as.integer( subPop )
+      }
+      #
+      weightSum <- sum( weight[subPop] )
+      if( weightSum <= 0 ) stop( gettext(
+            "Sum of 'weight' is not positive" ), domain = NA )
+      scaledWeight <- weight
+      scaledWeight[ !subPop ] <- 0
+      scaledWeight[ subPop ] <- scaledWeight[ subPop ] *
+         sum( subPop ) / weightSum
+      storage.mode( scaledWeight ) <- storage.mode( weight ) <- "double"
+      # 
+      if( is.null( mf$`(stratum)` ) ) {
+         # assume there is only one stratum
+         stratumInt <- rep( 1L, NROW(mf) )
+         stratum <- factor( stratum )
+      } else {
+         stratum <- droplevels( factor( mf$`(stratum)` ) )
+         if( any( is.na( stratum ) ) ) stop( gettext(
+            "Missing values in 'stratum' not allowed" ), domain = NA )
+	 stratumInt <- unclass( stratum )
+      }
+      #
+      if( is.null( mf$`(cluster)` ) ) {
+         # assume each unit is a cluster
+         cluster <- factor( 1:NROW(mf) )
+	 clusterInt <- unclass( cluster )
+      } else {
+         cluster <- droplevels( factor( mf$`(cluster)` ) )
+         if( any( is.na( cluster ) ) ) stop( gettext(
+            "Missing values in 'cluster' not allowed" ), domain = NA )
+         if( nest ) cluster <- interaction( stratum, cluster, drop=TRUE )
+	 clusterInt <- unclass( cluster )
+      }
+      # check distribution of stratum and cluster
+      stratClus <- aggregate( scaledWeight ~ stratum + cluster, FUN=sum )
+      tmp <- table( stratClus$cluster )
+      if( any( tmp > 1L ) ) stop( gettextf(
+         "Cluster '%s' appears in multiple strata; consider 'nest=TRUE'",
+         names(tmp)[tmp > 1L][1L] ), domain = NA )
+      nClus <- table( stratClus$stratum )
+      if( any( nClus < 2L ) ) stop( gettextf(
+         "Stratum '%s' has < 2 clusters; consider collapsing strata",
+         names(nClus)[nClus < 2L][1L] ), domain = NA )
+      nStrat <- length( nClus )
+      designInt <- cbind( stratumInt = stratumInt,
+         clusterInt = clusterInt, subPopInt = subPopInt )
+      storage.mode( designInt ) <- storage.mode(nClus) <-
+         storage.mode(nStrat) <- "integer"
+   } else {
+      nStrat <- 0L
+      nClus <- integer()
+      designInt <- matrix( integer(1L), 0L, 3L )
+      scaledWeight <- weight <- numeric()
+   }
+   mf$`(weight)` <- mf$`(subPop)` <- mf$`(stratum)` <- mf$`(cluster)` <- NULL
+   #----------------------------------
+   # all remaining variables in mf should be factors
    badV <- names(mf)[ ! unlist( lapply( mf, is.factor ) ) ]
    if( length(badV) > 0L ) stop( gettextf(
       "Variable '%s' is not a factor", badV[1L] ), domain=NA )
-   if( any(is.na(freq)) ) stop( gettext(
-      "Missing values in 'freq' not allowed"), domain = NA )
    #----------------------------------
    # coerce model frame variables to coarsened and aggregate 
    # to create mfSeen
-   mf <- lapply( mf, FUN=coarsened, warnIfCoarsened=FALSE)
-#   mf <- lapply( mf, FUN=sticky::sticky )
+   mf <- as.data.frame( lapply( mf, FUN=coarsened, warnIfCoarsened=FALSE ) )
    if( any( attr(theModel, "fixed") ) ) {
       mfFixed <- mf[ attr(theModel, "fixed") ]
       mfFixed <- lapply( mfFixed, dropCoarseLevels )
@@ -335,16 +426,27 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
             fVbad[1L] ), domain = NA ) 
       }
    }
-   mf$freq <- freqInt
-   form <-  as.formula( paste( "freq ~", 
-      paste( attr(theModel, "vars"), collapse="+" ) ), 
-      env = environment(theModel) )
-   mfSeen <- aggregate(form, FUN=sum, data=mf)
+   if( !surveyMode ) {
+      # aggregate
+      mf$freq <- freqInt
+      form <-  as.formula( paste( "freq ~", 
+         paste( attr(theModel, "vars"), collapse="+" ) ), 
+         env = environment(theModel) )
+      mfSeen <- aggregate(form, FUN=sum, data=mf)
+   } else {
+      # don't aggregate, but include design vars
+      mfSeen <- mf
+      mfSeen$`(stratum)` <- stratum
+      mfSeen$`(cluster)` <- cluster
+      mfSeen$`(subPop)` <- subPop
+      mfSeen$`(weight)` <- weight
+   }
    if( method == "mfSeen" ) return(mfSeen)
    #----------------------------------
    # information describing the coarsened factors in mfSeen
-   freqSeen <- mfSeen$freq
-   mfSeen$freq <- NULL
+   freqSeen <- if( surveyMode ) freqInt else mfSeen$freq
+   mfSeen$freq <- mfSeen$`(stratum)` <- mfSeen$`(cluster)` <-
+      mfSeen$`(subPop)` <- mfSeen$`(weight)` <- NULL
    nBaseLevels <- unlist( lapply( mfSeen, FUN=nBaseLevels) )
    nCoarseLevels <- unlist( lapply( mfSeen, FUN=nCoarseLevels) )
    nLevels <- unlist( lapply( mfSeen, FUN=nlevels) )
@@ -476,7 +578,7 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
    # prob, beta, vhatBeta
    if( is.null(startVal) ) {
       startValSupplied <- FALSE
-      probMean <- prob <- numeric( NROW(mfTrue) )
+      probMean <- prob <- mu <- numeric( NROW(mfTrue) )
       if( attr(theModel, "saturated") ) {
          betaMean <- beta <- numeric(0L)
          betaCovMat <- vhatBeta <- matrix( numeric(), 0L, 0L )
@@ -493,8 +595,8 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
          if( length(startVal) != NROW(mfTrue) ) stop( gettextf(
             "startVal has incorrect length, should be %i", NROW(mfTrue) ),
             domain = NA )
-         prob <- as.double( startVal )
-         probMean <- numeric( length(prob) )
+         mu <- as.double( startVal )
+         prob <- probMean <- numeric( length(mu) )
          betaMean <- beta <- numeric(0L)
          betaMean[] <- as.double(0)
          betaCovMat <- vhatBeta <- matrix( numeric(), 0L, 0L )
@@ -507,7 +609,7 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
          betaCovMat <- vhatBeta <- structure(
             matrix( numeric(1L), NCOL(modelMatrix), NCOL(modelMatrix) ),
             rownames = names(beta), colnames = names(beta) )
-         probMean <- prob <- numeric( NROW(mfTrue) )
+         probMean <- prob <- mu <- numeric( NROW(mfTrue) )
       }
    }
    #--------------------------------------------
@@ -671,6 +773,10 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
       dimVec[["maxIter"]] <- maxIter
    }
    #--------------------------------------------
+   # needed for survey mode
+   dimVecSurvey <- c( surveyModeInt = as.integer(surveyMode),
+      nStrat = nStrat )
+   #--------------------------------------------
    # create a matrix for holding message codes
    msg.len.max <- 40L
    msg.codes <- matrix( 0L, msg.len.max, 17L )
@@ -700,16 +806,20 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
       ctrlMCMCInt = ctrlMCMCInt,
       ctrlMCMCReal = ctrlMCMCReal,
       dimVecMCMC = dimVecMCMC,
+      dimVecSurvey = dimVecSurvey,
+      nClus = nClus,
+      designInt = designInt,
+      weight = weight,
       # inouts
-      prob = prob,
+      mu = mu,
       beta = beta,
       betaHat = betaHat,
       vhatBetaRWM = vhatBetaRWM,
       # outputs
-      iter = integer(1L),
-      convergedInt = integer(1L),
+      iterConvergedInt = integer(2L),
       maxDiff = numeric(1L),
       logliklogPPadded = matrix(numeric(1L), maxIter, 2L),
+      prob = prob,
       lambda = numeric( length(beta) ),
       freq = numeric( NROW(mfTrue) ),
       freqMean = numeric( NROW(mfTrue) ),
@@ -720,7 +830,7 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
       betaMean = betaMean,
       betaCovMat = betaCovMat,
       totalFreqUsePrior = numeric(1L),
-      totalFreqUseDataInt = integer(1L),
+      totalFreqUseDataIntVec = integer(2L),
       degreesOfFreedom = integer(1L),
       packedEstimates = numeric(estSumm$nPackedEstimates),
       packedEstimatesMean = numeric(estSumm$nPackedEstimates),
@@ -754,10 +864,16 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
    if( tmp$status != 0 ) stop( gettext( 
       "Procedure aborted" ), domain = NA )
    #--------------------------------------------
-    if( ( method == "EM" ) & ( tmp$iter > 0L ) & 
-       ( ! tmp$converged ) ) warning( gettextf(
-       "Procedure failed to converge by iteration %i", tmp$iter ), 
-       domain = NA )
+   tmp$iter <- tmp$iterConvergedInt[1L]
+   tmp$convergedInt <- tmp$iterConvergedInt[2L]
+   tmp$converged <- as.logical( tmp$convergedInt )
+   if( ( method == "EM" ) & ( tmp$iter > 0L ) & 
+      ( ! tmp$converged ) ) warning( gettextf(
+      "Procedure failed to converge by iteration %i", tmp$iter ), 
+      domain = NA )
+   #--------------------------------------------
+   tmp$totalFreqUseDataInt <- tmp$totalFreqUseDataIntVec[1L]
+   tmp$totalNSubPopInt <-  tmp$totalFreqUseDataIntVec[2L]
    #--------------------------------------------
    tmp$nIterActual <- tmp$nActual[1L]
    tmp$nSampleActual <- tmp$nActual[2L]
@@ -840,6 +956,12 @@ cvam.formula <- function( obj, data, freq, prior=cvamPrior(),
    tmp$estimates <- est
    tmp$latent <- latent
    tmp$call <- match.call()
+   tmp$surveyMode <- surveyMode
+   tmp$nStrat <- if( surveyMode ) nStrat else NULL
+   tmp$subPop <- if( surveyMode ) subPop else NULL
+   tmp$stratum <- if( surveyMode ) stratum else NULL
+   tmp$cluster <- if( surveyMode ) cluster else NULL
+   tmp$scaledWeight <- scaledWeight
    #--------------------------------------------
    tmp$betaHat <- if( tmp$atMode ) tmp$beta else NULL
    tmp$vhatBetaRWM <- if( tmp$atMode ) tmp$vhatBeta else NULL
@@ -911,14 +1033,14 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
       control <- do.call( "cvamControl", ctrl )
    }
    #----------------------------------
-   prob <- obj$prob
+   mu <- obj$mu
    beta <- obj$beta
    if( ! is.null(startVal) ) {
       if( attr(obj$model, "saturated") ) {
          if( length(startVal) != NROW(obj$mfTrue) ) stop( gettextf(
             "startVal has incorrect length, should be %i", NROW(obj$mfTrue) ),
             domain = NA )
-         prob[] <- as.double( startVal )
+         mu[] <- as.double( startVal )
       } else {
          if( length(startVal) != NCOL(obj$modelMatrix) ) stop( gettextf(
             "startVal has incorrect length, should be %i", 
@@ -926,6 +1048,7 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
          beta[] <- as.double( startVal )
       }
    }
+   #----------------------------------
    doingRWM <-  ( ! attr(obj$model, "saturated") ) &
       method == "MCMC" & control$typeMCMC == "RWM" 
    if( doingRWM & is.null(obj$vhatBetaRWM) )
@@ -953,9 +1076,10 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
             rownames = names(beta), colnames = names(beta) )
       }
    }
-   #
+   #----------------------------------
    startValSupplied <- TRUE
-   probMean <- prob
+   probMean <- prob <- numeric( length(mu) )
+   prob[] <- as.double(0)
    probMean[] <- as.double(0)
    betaMean <- beta
    betaMean[] <- as.double(0)
@@ -1025,6 +1149,7 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
    storage.mode(priorData) <- "integer"
    storage.mode(priorDataFreq) <- "double"
    storage.mode(priorDataFreqInt) <- "integer"
+   storage.mode(mu) <- "double"
    storage.mode(prob) <- "double"
    storage.mode(beta) <- "double"
    maxIter <- 0L
@@ -1158,16 +1283,20 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
       ctrlMCMCInt = ctrlMCMCInt,
       ctrlMCMCReal = ctrlMCMCReal,
       dimVecMCMC = dimVecMCMC,
+      dimVecSurvey = obj$dimVecSurvey,
+      nClus = obj$nClus,
+      designInt = obj$designInt,
+      weight = obj$weight,
       # inouts
-      prob = prob,
+      mu = mu,
       beta = beta,
       betaHat = betaHat,
       vhatBetaRWM = vhatBetaRWM,
       # outputs
-      iter = integer(1L),
-      convergedInt = integer(1L),
+      iterConvergedInt = integer(2L),
       maxDiff = numeric(1L),
       logliklogPPadded = matrix(numeric(1L), maxIter, 2L),
+      prob = prob,
       lambda = numeric( length(beta) ),
       freq = numeric( NROW(mfTrue) ),
       freqMean = numeric( NROW(mfTrue) ),
@@ -1178,7 +1307,7 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
       betaMean = betaMean,
       betaCovMat = betaCovMat,
       totalFreqUsePrior = numeric(1L),
-      totalFreqUseDataInt = integer(1L),
+      totalFreqUseDataIntVec = integer(2L),
       degreesOfFreedom = integer(1L),
       packedEstimates = numeric(estSumm$nPackedEstimates),
       packedEstimatesMean = numeric(estSumm$nPackedEstimates),
@@ -1212,10 +1341,16 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
    if( tmp$status != 0 ) stop( gettext( 
       "Procedure aborted" ), domain = NA )
    #--------------------------------------------
-    if( ( method == "EM" ) & ( tmp$iter > 0L ) & 
-       ( ! tmp$converged ) ) warning( gettextf(
-       "Procedure failed to converge by iteration %i", tmp$iter ), 
-       domain = NA )
+   tmp$iter <- tmp$iterConvergedInt[1L]
+   tmp$convergedInt <- tmp$iterConvergedInt[2L]
+   tmp$converged <- as.logical( tmp$convergedInt )
+   if( ( method == "EM" ) & ( tmp$iter > 0L ) & 
+      ( ! tmp$converged ) ) warning( gettextf(
+      "Procedure failed to converge by iteration %i", tmp$iter ), 
+      domain = NA )
+   #--------------------------------------------
+   tmp$totalFreqUseDataInt <- tmp$totalFreqUseDataIntVec[1L]
+   tmp$totalNSubPopInt <-  tmp$totalFreqUseDataIntVec[2L]
    #--------------------------------------------
    tmp$nIterActual <- tmp$nActual[1L]
    tmp$nSampleActual <- tmp$nActual[2L]
@@ -1299,6 +1434,12 @@ cvam.cvam <- function(obj, method=obj$method, control=NULL, startVal=NULL,
    tmp$argEst <- argEst
    tmp$latent <- obj$latent
    tmp$call <- match.call()
+   tmp$surveyMode <- obj$surveyMode
+   tmp$nStrat <- if( obj$surveyMode ) obj$nStrat else NULL
+   tmp$subPop <- if( obj$surveyMode ) obj$subPop else NULL
+   tmp$stratum <- if( obj$surveyMode ) obj$stratum else NULL
+   tmp$cluster <- if( obj$surveyMode ) obj$cluster else NULL
+   tmp$scaledWeight <- if( obj$surveyMode ) obj$scaledWeight else NULL
    #--------------------------------------------
    tmp$betaHat <- if( tmp$atMode ) tmp$beta else obj$betaHat
    tmp$vhatBetaRWM <- if( tmp$atMode ) tmp$vhatBeta else obj$vhatBetaRWM
@@ -1379,6 +1520,18 @@ summary.cvam <- function(object, showCoef=TRUE, showEstimates=TRUE,
    result$startValSupplied <- if( object$method != "approxBayes" )
       object$startValSupplied else NULL
    result$offsetSupplied <- object$offsetSupplied
+   result$surveyMode <- object$surveyMode
+   result$totalNSubPop <- object$totalNSubPopInt
+   result$avgWeightSubPop <- if( object$surveyMode )
+      mean( object$weight[ object$subPop ] ) else NULL
+   result$minWeightSubPop <- if( object$surveyMode )
+      min( object$weight[ object$subPop ] ) else NULL
+   result$maxWeightSubPop <- if( object$surveyMode )
+      max( object$weight[ object$subPop ] ) else NULL
+   result$nStrat <- if( object$surveyMode ) object$nStrat else NULL
+   result$nClus <- if( object$surveyMode ) object$nClus else NULL
+   result$nSubPopCluster <- if( object$surveyMode )
+      table( object$cluster[ object$subPop ] ) else NULL
    if( object$method == "EM" ) {
       result$converged <- object$converged
       result$iter <- object$iter
@@ -1429,26 +1582,74 @@ print.summary.cvam <- function(x, ...) {
    if( attr(x$model, "saturated") && ( x$prior$ridge > 0 ) ) {
       cat("Ridge factor was ignored because saturated=TRUE", sep="\n")
    }
-   cat("\n")
-   cat("Sample size:", sep="\n")
-   strA <- format( c( "total N in supplied data =",
-      "N from supplied data used in model fit =",
-      "prior effective sample size ="), justify="right" )
-   strB <- format( c( x$totalNSupplied, x$totalN, x$priorESS),
-      justify = "left" )
-   cat( paste(strA, strB), sep="\n")
-   cat("\n")
-   cat("Degrees of freedom:", sep="\n")
-   strA <- format( c("patterns of coarsened data =",
-      "cells in complete-data table =",
-      "cells without latent variables =",
-      "structural zero cells =",
-      "parameters in Poisson model =",
-      "df ="), justify="right" )
-   strB <- format( c(x$nDataPatt, x$nCells, x$nCellsNonLatent,
-      x$nZero, x$nParams, x$degreesOfFreedom),
-      justify = "left" )
-   cat( paste(strA, strB), sep="\n")
+   if( x$surveyMode ) {
+      cat("\n")
+      cat("Sample size:", sep="\n")
+      strA <- format( c( "total N in supplied data =",
+         "total N supplied in subpopulation =",
+         "N from supplied data used in model fit =",
+         "prior effective sample size ="), justify="right" )
+      strB <- format( c( x$totalNSupplied, x$totalNSubPop, 
+         x$totalN, x$priorESS),
+         justify = "left" )
+      cat( paste(strA, strB), sep="\n")
+      cat("\n")
+      cat("Survey design:", sep="\n")
+      strA <- format( c( "avg weight in subpopulation =",
+         "min =",
+         "max =",
+         "total number of strata =",
+         "total number of clusters =",
+         "avg clusters per stratum =",
+         "min =",
+         "max =",
+         "avg subpopulation N per cluster =",
+         "min =",
+         "max ="), justify="right" )
+      strB <- format( c( x$avgWeightSubPop, x$minWeightSubPop,
+         x$maxWeightSubPop, x$nStrat, sum(x$nClus), mean(x$nClus), 
+         min(x$nClus), max(x$nClus),
+         mean(x$nSubPopCluster),
+         min(x$nSubPopCluster), max(x$nSubPopCluster) ),
+         justify = "left" )
+      cat( paste(strA, strB), sep="\n")
+   } else {   
+      cat("\n")
+      cat("Sample size:", sep="\n")
+      strA <- format( c( "total N in supplied data =",
+         "N from supplied data used in model fit =",
+         "prior effective sample size ="), justify="right" )
+      strB <- format( c( x$totalNSupplied, x$totalN, x$priorESS),
+         justify = "left" )
+      cat( paste(strA, strB), sep="\n")
+   }
+   if( x$surveyMode ) {
+      cat("\n")
+      cat("Degrees of freedom:", sep="\n")
+      strA <- format( c(
+         "cells in complete-data table =",
+         "cells without latent variables =",
+         "structural zero cells =",
+         "parameters in Poisson model =",
+         "df ="), justify="right" )
+      strB <- format( c(x$nCells, x$nCellsNonLatent,
+         x$nZero, x$nParams, x$degreesOfFreedom),
+         justify = "left" )
+      cat( paste(strA, strB), sep="\n")
+   } else {
+      cat("\n")
+      cat("Degrees of freedom:", sep="\n")
+      strA <- format( c("patterns of coarsened data =",
+         "cells in complete-data table =",
+         "cells without latent variables =",
+         "structural zero cells =",
+         "parameters in Poisson model =",
+         "df ="), justify="right" )
+      strB <- format( c(x$nDataPatt, x$nCells, x$nCellsNonLatent,
+         x$nZero, x$nParams, x$degreesOfFreedom),
+         justify = "left" )
+      cat( paste(strA, strB), sep="\n")
+   }
    cat("\n")
    if( x$method != "approxBayes" ) {
       cat( "Starting values:", sep="\n")
@@ -1605,7 +1806,7 @@ print.summary.cvam <- function(x, ...) {
    form <- as.formula( paste("~", paste(aV, collapse="+") ), 
       env=environment(model) )
    cDT <- as.data.frame( xtabs(form, data=mf0), responseName="freq" )
-      cDT$freq <- NULL
+   cDT$freq <- NULL
    nVarTable <- length(cDT)  # how many variables in cDT
    dimTable <- nBaseLevels[ names(cDT) ]   # dimensions of cDT
    whichVarTable <- match( names(cDT), names(mf0) ) # positions in mf0
@@ -2939,3 +3140,786 @@ get.probSeries <- function( obj, levelNames=TRUE, sep=".",
    if(coda) coda::mcmc( result, thin=obj$control$thinMCMC ) else result
 }
 
+#################################################################
+#################################################################
+#################################################################
+#################################################################
+#################################################################
+# The two functions below are undocumented. They fit a multinomial
+# logit (baseline category) model to a coarsened response. The 
+# results are not yet collected into an object for summarizing etc.
+# Currently it fits only by ML/posterior mode under a DAP prior.
+# More work is needed to make this a documented feature of cvam.
+
+
+cvamLogitControl <- function( iterMaxEMNull = 500L, critEMNull = 1e-06,
+   flattenEMNull = 0, iterMaxEM = 500L, critEM = 1e-05,
+   iterMaxNR = 50L, critNR = 1e-05 ) {
+   stopifnot( ( iterMaxEMNull <- as.integer(iterMaxEMNull)[1L] ) >= 0L )
+   stopifnot( ( critEMNull <- as.double(critEMNull)[1L] ) > 0 )
+   stopifnot( ( flattenEMNull <- as.double(flattenEMNull)[1L] ) >= 0 )
+   stopifnot( ( iterMaxEM <- as.integer(iterMaxEM)[1L] ) >= 0L )
+   stopifnot( ( critEM <- as.double(critEM)[1L] ) > 0 )
+   stopifnot( ( iterMaxNR <- as.integer(iterMaxNR)[1L] ) >= 0L )
+   stopifnot( ( critNR <- as.double(critNR)[1L] ) > 0 )
+   list(
+      iterMaxEMNull = iterMaxEMNull,
+      critEMNull = critEMNull,
+      flattenEMNull = flattenEMNull,
+      iterMaxEM = iterMaxEM,
+      critEM = critEM,
+      iterMaxNR = iterMaxNR,
+      critNR = critNR )
+}
+
+
+cvamLogit <- function( formula, data, freq, baseline=NULL,
+      method = c("EM", "MCMC"), prior=c("none", "DAP"), priorFreqTotDAP = NULL, 
+      control = list(), startVal = NULL ) {
+   #----------------------------------
+   # handle arguments
+   method <- match.arg(method)
+   prior <- match.arg(prior)
+   control <- do.call( "cvamLogitControl", control ) 
+   #----------------------------------
+   # get the input data model frame
+   mc <- match.call( expand.dots=FALSE )
+   mc[[1L]] <- quote( stats::model.frame )
+   m <- match( c("formula", "data", "freq"), names(mc), nomatch=0L )
+   mc <- mc[ c(1L,m) ]
+   mc$na.action <- as.name("na.pass")
+   mc$drop.unused.levels <- FALSE
+   mf <- eval( mc, parent.frame() )
+   if( is.null( mf$`(freq)` ) ) {
+      freq <- rep(1, NROW(mf))
+      freqSupplied <- FALSE
+   } else {
+      freq <- mf$`(freq)`
+      mf$`(freq)` <- NULL
+      freqSupplied <- TRUE
+   }
+   freqInt <- as.integer(freq)
+   if( any( freq != freqInt ) ) warning( gettext(
+      "Some frequencies changed when integerized" ), domain = NA )
+   #----------------------------------
+   # get the response
+   responseVar <- model.response(mf)
+   if( is.null( responseVar ) ) stop( gettext(
+      "Model formula has no response variable" ), domain = NA )
+   if( ! is.factor(responseVar) ) stop( gettext( 
+      "Response variable is not a factor" ), domain = NA )
+   responseVar <- coarsened( responseVar, warnIfCoarsened = FALSE )
+   #----------------------------------
+   # unique responses and frequencies  
+   dFtmp <- data.frame( freqInt, responseVar)
+   dFtmp <- aggregate( freqInt ~ responseVar, FUN=sum, data=dFtmp)
+   dFtmp <- subset( dFtmp, freqInt > 0 )
+   bL <- baseLevels(responseVar)
+   present <- bL %in% dFtmp$responseVar
+   if( any( !present ) ) {
+      absent <- bL[!present]
+      stop( gettextf(
+         "No observed responses found at level '%s'", absent[1L]),
+         domain = NA)
+   }
+   uniqueResponse <- as.integer( unclass(dFtmp$responseVar) )
+   freqIntUniqueResponse <- as.integer( dFtmp$freqInt )
+   nUniqueResponse <- length(uniqueResponse)
+   #----------------------------------
+   # create the model matrix, but first
+   # look for missing or coarsened values in predictors
+   responseVarName <- as.character( terms(mf)[[2L]] )
+   responseVarPosn <- match( responseVarName, names(mf), nomatch=0L )
+   stopifnot( responseVarPosn != 0L )
+   dFtmp <-  mf[ -responseVarPosn ]
+   if( length( dFtmp ) > 0L ) {
+      dFtmp <- lapply( dFtmp,
+         function(x) { if( is.coarsened(x) ) dropCoarseLevels(x) else x } )
+      anyNA <- lapply( dFtmp, is.na )
+      anyNA <- unlist( lapply( anyNA, any ) )
+      if( any( anyNA ) ) stop( gettextf(
+         "Missing or coarsened values found in predictor variable '%s'",
+         names( dFtmp )[ anyNA ][1L] ), domain = NA )
+   }
+   modelMatrix <- model.matrix( formula, data=mf )
+   if( any( is.na(modelMatrix) ) ) stop( gettext(
+      "Missing values found in model predictors" ), domain = NA )
+   storage.mode(modelMatrix) <- "double"
+   #----------------------------------
+   # get the baseline
+   if( is.null( baseline ) ) {
+      baselineLev <- baseLevels( responseVar )[1L]
+   } else {
+      baselineLev <- as.character( baseline )[1L]
+      if( ! ( baselineLev %in% baseLevels( responseVar ) ) ) stop( gettextf(
+         "Baseline '%s' is not a valid level of the response variable",
+         baselineLev ), domain = NA )
+   }
+   baselineInt <- match( baselineLev, baseLevels( responseVar ) )
+   storage.mode(baselineInt) <- "integer"
+   #----------------------------------
+   # collapse by data patterns: covariates and response
+   mfNames <- names(mf)
+   mf$`(freq)` <- freqInt
+   formCollapse <- as.formula( paste( "`(freq)`", "~",
+      paste(mfNames, collapse=" + ") ) )
+   mfCollapse <- aggregate( formCollapse, FUN=sum, data=mf)
+   freqIntDataPatt <- mfCollapse$`(freq)`
+   mfCollapse$`(freq)` <- mf$`(freq)` <- NULL
+   cx <- do.call("paste", c( mfCollapse[,,drop=FALSE], sep="\r" ) )
+   ct <- do.call("paste", c( mf[,,drop=FALSE], sep="\r" ) )
+   rowPosnDataPatt <- match(cx,ct)
+   rm(cx, ct, mfCollapse) # no longer needed
+   gc()
+   storage.mode(freqIntDataPatt) <-
+      storage.mode(rowPosnDataPatt) <- "integer" 
+   nDataPatt <- length(freqIntDataPatt)
+   #----------------------------------
+   # unique covariate patterns
+   dFtmp <- as.data.frame(modelMatrix)
+   cx <- do.call("paste", c( dFtmp[,,drop=FALSE], sep="\r" ) )
+   rowPosnCovPatt <- as.integer( (1:length(cx))[ !duplicated(cx) ] )
+   nCovPatt <- length( rowPosnCovPatt )
+   #----------------------------------
+   # covariate patterns for data patterns
+   covPattForDataPatt <- match( cx[rowPosnDataPatt], cx[rowPosnCovPatt] )
+   storage.mode(covPattForDataPatt) <- "integer"
+   # order data patterns by their covariate patterns
+   o <- order( covPattForDataPatt )
+   rowPosnDataPatt <- rowPosnDataPatt[o]
+   freqIntDataPatt <- freqIntDataPatt[o]
+   covPattForDataPatt <- covPattForDataPatt[o]
+   #----------------------------------
+   # total prior frequency for DAP, to be spread equally across covariate
+   # patterns
+   if( prior == "DAP" ) {
+      if( is.null( priorFreqTotDAP ) ) {
+         priorFreqTotDAP <- NCOL( modelMatrix ) *
+            ( nBaseLevels( responseVar ) - 1L )
+      } else {
+         priorFreqTotDAP <- as.numeric( priorFreqTotDAP )[1L]
+         if( priorFreqTotDAP <= 0 ) stop( gettext(
+            "Supplied value of priorFreqTotDAP is not positive" ),
+             domain = NA )
+      }
+   } else priorFreqTotDAP <- 0
+   storage.mode( priorFreqTotDAP ) <- "double"
+   #----------------------------------
+   # handle startVal
+   if( is.null(startVal) ) {
+      startValSupplied <- FALSE
+      beta <- matrix( numeric(1L), NCOL(modelMatrix),
+         nBaseLevels(responseVar) )
+   } else {
+      startValSupplied <- TRUE
+      if( NROW(startVal) != NCOL(modelMatrix) ) stop( gettextf(
+         "startVal has incorrect number of rows, should be %i",
+         NCOL(modelMatrix) ), domain = NA )
+      if( NCOL(startVal) != nBaseLevels(responseVar) ) stop( gettextf(
+         "startVal has incorrect number of columns, should be %i",
+         nBaseLevels(responseVar) ), domain = NA )
+      if( any( startVal[, baselineInt] != 0 ) ) stop( gettextf(
+         "Invalid starting value; some elements of startVal[, %i] are not zero",
+          baselineInt ), domain = NA )
+      beta <- startVal
+      storage.mode(startVal) <- "double"
+   }
+   #----------------------------------
+   # prepare objects for Fortran call
+   methodInt <- match( method, c("EM", "MCMC"), nomatch=0L)
+   stopifnot( methodInt != 0L )
+   priorInt <- match( prior, c("none", "DAP"), nomatch=0L)
+   stopifnot( priorInt != 0L )
+   packedMap <- .packedMapping( responseVar )
+   dimVec <- c(
+      nrowInputData = NROW(mf),           # 1
+      ncolResponseVar = 1L,               # 2
+      nPackedMap = length(packedMap),     # 3
+      ncolMM = NCOL(modelMatrix),         # 4
+      nDataPatt = nDataPatt,              # 5
+      nCovPatt = nCovPatt,                # 6
+      iterMax = control$iterMaxEM )       # 7
+   storage.mode( dimVec ) <- "integer"
+   nLevelsMatrix <- cbind(
+      nBaseLevels = nBaseLevels( responseVar ),
+      nCoarseLevels = nCoarseLevels( responseVar ),
+      nLevels = nlevels( responseVar ) )
+   storage.mode( nLevelsMatrix ) <- storage.mode( packedMap ) <- "integer"
+   responseVar <- data.matrix( unclass(responseVar) )
+   ctrlReal <- c( critEMNull = control$critEMNull,     # 1
+      flattenEMNull = control$flattenEMNull,           # 2
+      priorFreqTotDAP = priorFreqTotDAP,               # 3
+      critEM = control$critEM,                         # 4
+      critNR = control$critNR )                        # 5
+   storage.mode(ctrlReal) <- "double"
+   ctrlInt <- c( iterMaxEMNull = control$iterMaxEMNull,    # 1
+      iterMaxEM = control$iterMaxEM,                       # 2
+      startValUseInt = as.integer( startValSupplied ),     # 3
+      iterMaxNR = control$iterMaxNR )                      # 4
+   storage.mode(ctrlInt) <- "integer"
+   #----------------------------------
+   # create a matrix for holding message codes
+   msg.len.max <- 40L
+   msg.codes <- matrix( 0L, msg.len.max, 17L )
+   #----------------------------------
+   tmp <- .Fortran( "cvam_logit",
+      methodInt = methodInt,
+      dimVec = dimVec,
+      modelMatrix = modelMatrix,
+      responseVar = responseVar,
+      freqInt = freqInt,
+      nLevelsMatrix = nLevelsMatrix,
+      packedMap = packedMap,
+      baselineInt = baselineInt,
+      rowPosnDataPatt = rowPosnDataPatt,
+      freqIntDataPatt = freqIntDataPatt,
+      rowPosnCovPatt = rowPosnCovPatt,
+      covPattForDataPatt = covPattForDataPatt,
+      priorInt = priorInt,
+      ctrlReal = ctrlReal,
+      ctrlInt = ctrlInt,
+      # inouts
+      beta = beta,
+      # outputs
+      proportionsDAP = numeric( nLevelsMatrix[1L,1L] ), 
+      iter = integer(1L),
+      convergedInt = integer(1L),
+      maxDiff = numeric(1L),
+      loglik = numeric( dimVec[["iterMax"]] ),
+      logP = numeric( dimVec[["iterMax"]] ),
+      vhatBeta = matrix( numeric(1L),
+         NCOL(modelMatrix) * ( nLevelsMatrix[1L,1L] - 1L ),
+         NCOL(modelMatrix) * ( nLevelsMatrix[1L,1L] - 1L ) ),
+      # messaging
+      status = integer(1L),
+      msg.len.max = msg.len.max,
+      msg.codes = msg.codes,
+      msg.len.actual = integer(1L),
+      PACKAGE = "cvam" )
+   #--------------------------------------------
+   # display message from Fortran, if present
+   msg.lines <- .msgCvam( tmp$msg.codes, tmp$msg.len.actual )
+   if( is.null( msg.lines ) ){
+      msg <- "OK"
+   }
+   else{
+      msg <- paste0( msg.lines, collapse="\n" )
+   }
+   msg <- paste( msg, "\n", sep="")
+   if( msg!= "OK\n" ) cat( paste("Note: ", msg, sep="") )
+   #--------------------------------------------
+   if( tmp$status != 0 ) stop( gettext( 
+      "Procedure aborted" ), domain = NA )
+   #--------------------------------------------
+   tmp$converged <- as.logical( tmp$convergedInt )
+   if( ( method == "EM" ) & ( tmp$iter > 0L ) & 
+      ( ! tmp$converged ) ) warning( gettextf(
+      "Procedure failed to converge by iteration %i", tmp$iter ), 
+      domain = NA )
+   #--------------------------------------------
+   if( method == "EM" ) {
+      tmp$loglik <- if( tmp$iter > 0L ) 
+         tmp$loglik[1:tmp$iter] else numeric()
+      tmp$logP <- if( tmp$iter > 0L ) 
+         tmp$logP[1:tmp$iter] else numeric()
+   }
+   #--------------------------------------------
+   tmp
+}
+
+#################################################################
+#################################################################
+#################################################################
+#################################################################
+#################################################################
+# Undocumented functions for fitting the enhanced LC 
+# measurement model
+
+cvamLCMeas <- function( obj, ...) {
+   # S3 generic function
+   UseMethod("cvamLCMeas")
+}
+
+cvamLCMeas.default <- function( obj, ...) {
+   stop( gettext(
+      'First argument nust be an object of class "formula" or "cvamLCMeas"'),
+      domain = NA )
+}
+
+.isTwoSided <- function( obj ) { inherits(obj, "formula") &&
+   length(obj) == 3L }
+
+.modFormula <- function( form ) {
+   # process a formula into a .modFormula object
+   stopifnot( .isTwoSided(form) )
+   LHS <- form[[2L]]
+   RHS <- form[[3L]]
+   if( ( ! is.call(LHS) ) || ( LHS[[1L]] != as.symbol("|") ) || 
+      ( length( all.vars( LHS[[2L]] ) ) > 1 ) ||
+      ( length( all.vars( LHS[[3L]] ) ) > 1 ) ) stop( gettextf(
+      "Left-hand side of '%s' has incorrect form", deparse(form) ),
+      domain = NA )
+   formulaStr <- deparse(form)
+   form[[2L]] <- form[[3L]]
+   form <- form[1:2]
+   nullModel <- ( length( all.vars(form) ) == 0L )
+   structure( form,
+      item = all.vars( LHS[[2L]] ),
+      latentVar = all.vars( LHS[[3L]] ),
+      moderators = all.vars( form ),
+      nullModel = nullModel,
+      formulaStr = formulaStr,
+      class = c(".modFormula", class(form)) )
+}
+
+.cvamLCMeasModel <- function( obj, modFormulas ) {
+   # process the formula into a .cvamLCMeasModel object
+   if( ! .isTwoSided(obj) ) stop( gettext(
+      "Argument 'obj' is not a two-sided formula" ), domain=NA )
+   LHS <- obj[[2L]]
+   if( ( ! is.call(LHS) ) || ( LHS[[1L]] != as.symbol("cbind") ) )
+      stop( gettext( 'Left-hand side of "obj" is not a call to "cbind"' ),
+      domain = NA )
+   items <- all.vars(LHS)
+   if( length(items) < 2L ) stop( gettext(
+      "Cannot fit a latent-class model with only one item"), domain = NA )
+   RHS <- obj[[3L]]
+   if( ! is.symbol(RHS) ) stop( gettext(
+      'Right-hand side of "obj" is not a single variable' ),
+      domain = NA )
+   latentVar <- as.character(RHS)
+   #
+   if( is.null(modFormulas) ) modFormulas <- list()  
+   if( inherits( modFormulas, "formula" ) ) modFormulas <-
+      list( modFormulas )
+   if( ! is.list(modFormulas) ) stop( gettext(
+      "Argument 'modFormulas' is not a formula or a list" ), domain = NA )
+   if( ! all(sapply( modFormulas, FUN=.isTwoSided ) ) ) stop( gettextf(
+      "Some components of 'modFormulas' are not two-sided formulas" ),
+      domain = NA )
+   mF <- lapply( modFormulas, FUN=.modFormula )
+   mFitems <- unlist( lapply( mF, FUN=attr, "item" ) )
+   if( length(mFitems) > 0L ) {
+      w <- mFitems %in% items
+      if( any(!w) ) stop( gettextf(
+         "Variable '%s' appearing before '|' is not a measurement item",
+         mFitems[!w][1] ), domain = NA )
+      if( any( duplicated( mFitems ) ) ) {
+         dup <- mFitems[ duplicated( mFitems ) ]
+         stop( gettextf(
+            "Item '%s' appears in more than one modFormula", dup[1] ),
+            domain = NA )
+      }
+   } else mFitems <- character(0L)
+   mFlatentVar <- unlist( lapply( mF, FUN=attr, "latentVar" ) )
+   if( length(mFlatentVar) > 0L ) {
+      if( any( mFlatentVar != latentVar ) ) {
+         badVar <- mFlatentVar[ mFlatentVar != latentVar ]
+         stop( gettextf( "Variable '%s' appearing after '|' is not latent",
+            badVar[1]), domain = NA )  
+      }
+   } else mFlatentVar <- character(0L)
+   # expand mF to include all items
+   present <- items %in% unlist( lapply(mF, attr, "item") )
+   for( i in seq_along(items) ) {
+      if( ! present[i] ) {
+         form <- as.formula( paste( items[i], "|", latentVar, " ~ 1" ),
+            env = environment(obj) )
+         mF <- c( mF, .modFormula(form) )
+      }
+   }
+   o <- match( items, unlist( lapply(mF, attr, "item") ) )
+   mF <- mF[o]
+   moderators <- unique( unlist( lapply( mF, FUN=attr, "moderators" ) ) )
+   if( length(moderators) == 0L ) moderators <- character(0L)
+   #
+   allVars <- c( items, latentVar, moderators )
+   varType <- c( rep("item", length(items)), "latent",
+      rep("moderator", length(moderators) ) )
+   structure( obj,
+      formulaStr = deparse(obj),
+      allVars = allVars,
+      varType = varType,
+      items = items,
+      latentVar = latentVar,
+      moderators = moderators,
+      modFormulas = mF,
+      class = c( ".cvamLCMeasModel", class(obj) ) )
+}
+
+.cvamLCMeasParam <- function( model, mf, baselineVec, mm, mmList, value=NULL ) {
+   # create a .cvamLCMeasParam object
+   stopifnot( inherits( model, ".cvamLCMeasModel" ) )
+   items <- mf[ attr(model, "items") ]
+   latentVar <- mf[[ attr( model, "latentVar" ) ]]
+   itemBaseLevels <- lapply( items, baseLevels )
+   latentVarBaseLevels <- baseLevels( latentVar )
+   nItem <- length(items)
+   nClass <- length( latentVarBaseLevels )
+   # find expected length of parameter vector
+   ncolx <- unlist( lapply(mmList, length) )
+   D <- nClass + nClass *
+      sum( ( unlist( lapply( itemBaseLevels, length ) ) - 1L ) * ncolx )
+   if( ! is.null(value) ) {
+      if( length(value) != D )  stop( gettext(
+         "Starting value provided for parameters has incorrect length" ),
+         domain = NA )
+      prev <- value[1:nClass]
+      if( ( ! all.equal( sum(prev), 1 ) ) || any( prev <= 0 ) ) stop( gettext(
+         "Starting values provided for class prevalences are not valid" ),
+         domain = NA )
+   } else {
+      value <- rep(0,D)
+      value[1:nClass] <- 1 / nClass
+      prev <- value[1:nClass]
+   }
+   storage.mode(value) <- "double"
+   names( prev ) <- latentVarBaseLevels
+   result <- list( value = value, prevalences = prev )
+   #
+   coef <- as.list( 1:nClass )
+   posn <- nClass
+   for( c in 1:nClass ) {
+      coef[[c]] <- as.list( 1:nItem )
+      for( j in 1:nItem ) {
+         coef[[c]][[j]] <- matrix(0, length( mmList[[j]] ), nClass )
+         dimnames( coef[[c]][[j]] ) <- list(
+            colnames(mm)[ mmList[[j]] ],
+            latentVarBaseLevels )
+         coef[[c]][[j]] <- structure( coef[[c]][[j]],
+             baseline = baselineVec[j] )
+         for(cc in 1:nClass ) {
+             if( cc != attr( coef[[c]][[j]], "baseline" ) ) {
+	        for(jj in 1:NROW( coef[[c]][[j]] ) ) {
+                   posn <- posn + 1L
+		   coef[[c]][[j]][jj,cc] <- value[posn]
+		}
+             }
+          }
+      }      
+      names( coef[[c]] ) <- names( items )
+   }
+   names( coef ) <- latentVarBaseLevels	
+   result$coefficients <- coef
+   result
+}
+
+cvamLCMeasControl <- function( iterMaxEMNull = 500L, critEMNull = 1e-06,
+   flattenEMNull = 0, 
+   iterMaxEMItem = 500L, critEMItem = 1e-06,
+   iterMaxEM = 500L, critEM = 1e-05,
+   iterMaxNR = 50L, critNR = 1e-05,
+   startValJitter = 0, logitPriorStrength = 1 ) {
+   stopifnot( ( iterMaxEMNull <- as.integer(iterMaxEMNull)[1L] ) >= 0L )
+   stopifnot( ( critEMNull <- as.double(critEMNull)[1L] ) > 0 )
+   stopifnot( ( flattenEMNull <- as.double(flattenEMNull)[1L] ) >= 0 )
+   stopifnot( ( iterMaxEMItem <- as.integer(iterMaxEMItem)[1L] ) >= 0L )
+   stopifnot( ( critEMItem <- as.double(critEMItem)[1L] ) > 0 )
+   stopifnot( ( iterMaxEM <- as.integer(iterMaxEM)[1L] ) >= 0L )
+   stopifnot( ( critEM <- as.double(critEM)[1L] ) > 0 )
+   stopifnot( ( iterMaxNR <- as.integer(iterMaxNR)[1L] ) >= 0L )
+   stopifnot( ( critNR <- as.double(critNR)[1L] ) > 0 )
+   stopifnot( ( startValJitter <- as.double(startValJitter)[1L] ) >= 0 )
+   stopifnot( ( logitPriorStrength <- as.double(logitPriorStrength)[1L] ) >= 0 )
+   list(
+      iterMaxEMNull = iterMaxEMNull,
+      critEMNull = critEMNull,
+      flattenEMNull = flattenEMNull,
+      iterMaxEMItem = iterMaxEMItem,
+      critEMItem = critEMItem,
+      iterMaxEM = iterMaxEM,
+      critEM = critEM,
+      iterMaxNR = iterMaxNR,
+      critNR = critNR,
+      startValJitter = startValJitter,
+      logitPriorStrength = logitPriorStrength )
+}
+
+cvamLCMeas.formula <- function( obj, data, freq, modFormulas = NULL, 
+   baseline = NULL, method = c("EM", "MCMC"), prior=cvamPrior(),
+   logitPrior=c("none", "DAP"),
+   control=list(), startVal=NULL ) {
+   #----------------------------------
+   # handle arguments
+   theModel <- .cvamLCMeasModel( obj, modFormulas )
+   method <- match.arg(method)
+   control <- do.call( "cvamLCMeasControl", control )
+   stopifnot( inherits(prior, "cvamPrior") )
+   logitPrior <- match.arg(logitPrior)
+   #----------------------------------
+   # get the input data model frame and frequencies
+   mc <- match.call( expand.dots=FALSE )
+   mc[[1]] <- quote(stats::model.frame)
+   m <- match( c("obj", "data", "freq"), names(mc), nomatch=0L )
+   mc <- mc[ c(1L,m) ]
+   names(mc)[2] <- "formula"
+   form <- as.formula(
+      paste("~", paste( attr(theModel, "allVars"), collapse="+") ),
+      env = environment(obj) )
+   mc[[2]] <- form
+   mc$na.action <- as.name("na.pass")
+   mc$drop.unused.levels <- FALSE
+   mf <- eval( mc, parent.frame() )
+   if( is.null( mf$`(freq)` ) ) {
+      freq <- rep(1L, NROW(mf))
+      freqSupplied <- FALSE
+   } else {
+      freq <- mf$`(freq)`
+      mf$`(freq)` <- NULL 
+      freqSupplied <- TRUE
+   }
+   if( any(is.na(freq)) ) stop( gettext(
+      "Missing values in 'freq' not allowed"), domain = NA )
+   freqInt <- as.integer(freq)
+   if( any( freq != freqInt ) ) warning( gettext(
+      "Some frequencies changed when integerized" ), domain=NA )
+   w <- colnames(mf) %in% attr( theModel, "items" )
+   nonFac <- ! unlist( lapply( mf, is.factor ) )
+   badV <- names(mf)[ w & nonFac ]
+   if( length(badV) > 0L ) stop( gettextf(
+      "Measurement item '%s' is not a factor", badV[1L] ), domain=NA )
+   w <- ( 1:NCOL(mf) )[ colnames(mf) == attr( theModel, "latentVar" ) ]
+   if( ! is.latentFactor( mf[[w]] ) ) stop( gettextf(
+      "Variable '%s' is not a latent factor",
+      attr( theModel, "latentVar" ) ), domain = NA )
+   #----------------------------------
+   # coerce items to coarsened and aggregate model frame
+   for( j in seq_along(mf) ) {
+      if( colnames(mf)[j] %in% attr( theModel, "items" ) ) mf[[j]] <-
+         coarsened( mf[[j]], warnIfCoarsened=FALSE )
+      if( colnames(mf)[j] %in% attr( theModel, "moderators" ) ) {
+         if( is.coarsened( mf[[j]] ) ) stop( gettextf(
+            "Moderator variable '%s' is a coarsened factor",
+            colnames(mf)[j] ), domain = NA )
+         if( any( is.na( mf[[j]] ) ) ) stop( gettextf(
+            "Missing values found in moderator variable '%s'", 
+            colnames(mf)[j] ), domain = NA )
+      }
+   }
+   mf$freq <- freqInt
+   form <- as.formula(
+      paste("freq ~", paste( attr(theModel, "allVars"), collapse="+") ),
+      env = environment(theModel) )
+   mfAgg <- aggregate(form, FUN=sum, data=mf)
+   freqIntAgg <- mfAgg$freq
+   mfAgg$freq <- NULL
+   storage.mode(freqIntAgg) <- "integer"
+   #----------------------------------
+   # check responses for empty baseLevels
+   for( j in 1:length( attr( theModel, "items" ) ) ) {
+      iN <- attr(theModel, "items")[j]
+      w <- match( iN, names(mfAgg) )
+      dFtmp <- data.frame( mfAgg[[w]], freqIntAgg )
+      names(dFtmp) <- c(iN,"freq")
+      dFtmp <- aggregate(freq ~ ., data=dFtmp, FUN=sum )
+      dFtmp <- subset(dFtmp, freq>0 )
+      bL <- baseLevels( dFtmp[[iN]])
+      present <- bL %in% dFtmp[[iN]]
+      if( any( !present ) ) {
+         absent <- bL[ !present ]
+         stop( gettextf(
+            "No observed responses found at level '%s' of '%s'",
+            absent[1L], iN ), domain = NA )
+      }
+   }
+   #----------------------------------
+   # model matrices from moderator formulas
+   mmList <- list()
+   mm <- numeric(0)
+   for(j in seq_along( attr(theModel, "items") ) ) {
+      form <- attr( theModel, "modFormula" )[[j]]
+      mmList <- c( mmList,
+         list( model.matrix( form, data=mfAgg  ) ) )
+      mm <- cbind( mm, mmList[[j]] )
+   }
+   mm <- mm[, !duplicated( t(mm) ) ]  # model matrix w/o duplicate columns
+   mmStr <- apply( mm, 2,
+      FUN=function(x) paste(as.character(x), collapse="*") )
+   for( j in seq_along(mmList) ) {
+      tmp <- apply( mmList[[j]], 2,
+         FUN=function(x) paste(as.character(x), collapse="*") )
+      mmList[[j]] <- match( tmp, mmStr )
+   }
+   rm(mmStr, tmp)
+   ncolx <- unlist( lapply(mmList, length) )
+   xcol <- unlist(mmList)
+   storage.mode(xcol) <- storage.mode(ncolx) <- "integer"
+   #----------------------------------
+   # baseline
+   baselineVec <- rep( 1L, length( attr(theModel, "items") ) )
+   names(baselineVec) <- attr(theModel, "items")
+   if( ! is.null(baseline) ) {
+      if( ( ! is.character(baseline) ) || ! is.vector(baseline) ||
+         is.null(names(baseline)) ) stop( gettext(
+         "'baseline' is not a named character vector" ), domain = NA )
+      iN <- attr( theModel, "items" )
+      for(j in seq_along(baseline) ) {
+         n <- names(baseline)[j]
+         posn <- match( n, iN, nomatch=0L )
+         if( posn == 0L ) stop( gettextf(
+            "In baseline: '%s' is not the name of a measurement item",
+            n ), domain = NA )
+         posn <- match( baseline[j], baseLevels( mfAgg[[n]] ),
+            nomatch = 0L )
+         if( posn == 0L ) stop( gettextf(
+            "In baseline: '%s' is not a level of '%s'",
+            baseline[j], n ), domain = NA )
+         baselineVec[[n]] <- posn
+      }
+   }
+   storage.mode(baselineVec) <- "integer"
+   #----------------------------------
+   # identify covariate patterns and data patterns for each item
+   logitCovPatt <- logitDataPatt <-
+      rowPosnDataPatt <- rowPosnCovPatt <- covPattForDataPatt <-
+      as.list( 1:length( attr(theModel, "items" ) ) )
+   for( j in 1:length( attr(theModel, "items" ) ) ) {
+      iN <- attr(theModel, "items")[j]
+      dFtmpA <- as.data.frame( cbind( unclass( mfAgg[[iN]] ),
+         mm[, mmList[[j]], drop=FALSE ] ) )
+      names(dFtmpA)[1] <- iN
+      dFtmpAStr <- do.call( "paste", c( dFtmpA[,,drop=FALSE], sep="\r" ) )
+      uniqueDataPattStr <- dFtmpAStr[ ! duplicated( dFtmpAStr ) ]
+      rowPosnDataPatt[[j]] <- match( uniqueDataPattStr, dFtmpAStr )
+      dFtmpB <- as.data.frame( mm[, mmList[[j]], drop=FALSE ] )
+      dFtmpBStr <- do.call( "paste", c( dFtmpB[,,drop=FALSE], sep="\r" ) )
+      uniqueCovPattStr <- dFtmpBStr[ ! duplicated( dFtmpBStr ) ]
+      rowPosnCovPatt[[j]] <- match( uniqueCovPattStr, dFtmpBStr )
+      covPattForDataPatt[[j]] <- match( dFtmpBStr[ rowPosnDataPatt[[j]] ],
+         dFtmpBStr[ rowPosnCovPatt[[j]] ] )
+      o <- order( covPattForDataPatt[[j]] )
+      rowPosnDataPatt[[j]] <- rowPosnDataPatt[[j]][o]
+      covPattForDataPatt[[j]] <- covPattForDataPatt[[j]][o]
+      logitDataPatt[[j]] <- match( dFtmpAStr,
+         dFtmpAStr[ rowPosnDataPatt[[j]] ] )
+      logitCovPatt[[j]] <- match( dFtmpBStr,
+         dFtmpBStr[ rowPosnCovPatt[[j]] ] )
+   } 
+   rm( dFtmpA, dFtmpAStr, dFtmpB, dFtmpBStr ) # no longer needed
+   logitCovPatt <- do.call( "cbind", logitCovPatt ) 
+   logitDataPatt <- do.call( "cbind", logitDataPatt ) 
+   storage.mode(logitCovPatt) <- storage.mode(logitDataPatt) <- "integer"
+   nCovPatt <- unlist( lapply( rowPosnCovPatt, length ) )
+   nCovPattTot <- sum(nCovPatt)
+   nDataPatt <- unlist( lapply( rowPosnDataPatt, length ) )
+   nDataPattTot <- sum(nDataPatt)
+   storage.mode(nCovPatt) <- storage.mode(nCovPattTot) <- 
+      storage.mode(nDataPatt) <- storage.mode(nDataPattTot) <- 
+      "integer"
+   rowPosnCovPatt <- unlist(rowPosnCovPatt)
+   rowPosnDataPatt <- unlist(rowPosnDataPatt)
+   covPattForDataPatt <- unlist(covPattForDataPatt)
+   storage.mode(rowPosnCovPatt) <- storage.mode(rowPosnDataPatt) <-
+      storage.mode(covPattForDataPatt) <- "integer"
+   #----------------------------------
+   # starting value for parameters
+   startValSupplied <- ! is.null( startVal )
+   if( startValSupplied &&
+      inherits( startVal, ".cvamLCMeasParam" ) ) startVal <- startVal$value
+   mf0 <- mfAgg[ integer(0), , drop=FALSE ]
+   startVal <- .cvamLCMeasParam( theModel, mf0, baselineVec, mm, mmList,
+      startVal )
+   startValUseInt <- as.integer( startValSupplied )
+   #----------------------------------
+   # prepare objects for Fortran call
+   methodInt <- match( method, c("EM", "MCMC"), nomatch=0L)
+   stopifnot( methodInt != 0L )
+   logitPriorInt <- match( logitPrior, c("none", "DAP"), nomatch=0L)
+   stopifnot( logitPriorInt != 0L )
+   ystar <- mfAgg[ c( attr( theModel, "items" ),
+      attr( theModel, "latentVar" ) ) ]
+   nClass <- nBaseLevels( ystar[[ attr(theModel, "latentVar") ]] )
+   packedMap <- unlist( lapply( ystar, FUN=.packedMapping ) )
+   nBaseLevels <- unlist( lapply( ystar, FUN=nBaseLevels) )
+   nCoarseLevels <- unlist( lapply( ystar, FUN=nCoarseLevels) )
+   nLevels <- unlist( lapply( ystar, FUN=nlevels) )
+   ystar <- data.matrix(ystar)
+   storage.mode(ystar) <- "integer"
+   dimVec <- c(
+      nrowInputData = NROW(mfAgg),         # 1
+      ncolYstar = NCOL(ystar),             # 2
+      nPackedMap = length(packedMap),      # 3
+      nItems = NCOL(ystar) - 1L,           # 4
+      nClass = nClass,                     # 5
+      ncolMM = NCOL(mm),                   # 6
+      lengthXcol = length(xcol),           # 7
+      iterMax = control$iterMaxEM,         # 8
+      nCovPattTot = nCovPattTot,           # 9
+      nDataPattTot = nDataPattTot,         # 10
+      nParams = length(startVal$value) )   # 11
+   storage.mode(dimVec) <- "integer"
+   nLevelsMatrix <- cbind( nBaseLevels=nBaseLevels, 
+      nCoarseLevels=nCoarseLevels, nLevels=nLevels )
+   storage.mode(nLevelsMatrix) <- "integer"
+   storage.mode(mm) <- "double"
+   ctrlReal <- c( critEMNull = control$critEMNull,     # 1
+      flattenEMNull = control$flattenEMNull,           # 2
+      critEM = control$critEM,                         # 3
+      critNR = control$critNR,                         # 4
+      critEMItem = control$critEMItem,                 # 5
+      startValJitter = control$startValJitter,         # 6
+      logitPriorStrength = control$logitPriorStrength ) # 7
+   storage.mode(ctrlReal) <- "double"
+   ctrlInt <- c( iterMaxEMNull = control$iterMaxEMNull,    # 1
+      iterMaxEM = control$iterMaxEM,                       # 2
+      iterMaxNR = control$iterMaxNR,                       # 3
+      iterMaxEMItem = control$iterMaxEMItem,               # 4
+      startValUseInt = startValUseInt )                    # 5
+   storage.mode(ctrlInt) <- "integer"
+   #----------------------------------
+   # create a matrix for holding message codes
+   msg.len.max <- 40L
+   msg.codes <- matrix( 0L, msg.len.max, 17L )
+   #----------------------------------
+   tmp <- .Fortran( "cvam_lcmeas",
+      methodInt = methodInt,
+      dimVec = dimVec,
+      modelMatrix = mm,
+      ystar = ystar,
+      freqInt = freqIntAgg,
+      nLevelsMatrix = nLevelsMatrix,
+      packedMap = packedMap,
+      baseline = baselineVec,
+      ncolx = ncolx,
+      xcol = xcol,
+      logitCovPatt = logitCovPatt,
+      logitDataPatt = logitDataPatt,
+      nCovPatt = nCovPatt,
+      nDataPatt = nDataPatt,
+      rowPosnCovPatt = rowPosnCovPatt,
+      rowPosnDataPatt = rowPosnDataPatt,
+      covPattForDataPatt = covPattForDataPatt,
+      logitPriorInt = logitPriorInt,
+      ctrlReal = ctrlReal,
+      ctrlInt = ctrlInt,
+      # inouts
+      params = startVal$value, 
+      # outputs
+      iter = integer(1L),
+      convergedInt = integer(1L),
+      maxDiff = numeric(1L),
+      loglik = numeric( dimVec[["iterMax"]] ),
+      logP = numeric( dimVec[["iterMax"]] ),
+      # messaging
+      status = integer(1L),
+      msg.len.max = msg.len.max,
+      msg.codes = msg.codes,
+      msg.len.actual = integer(1L),
+      PACKAGE = "cvam" )
+   #--------------------------------------------
+   # display message from Fortran, if present
+   msg.lines <- .msgCvam( tmp$msg.codes, tmp$msg.len.actual )
+   if( is.null( msg.lines ) ){
+      msg <- "OK"
+   }
+   else{
+      msg <- paste0( msg.lines, collapse="\n" )
+   }
+   msg <- paste( msg, "\n", sep="")
+   if( msg!= "OK\n" ) cat( paste("Note: ", msg, sep="") )
+   #--------------------------------------------
+   if( tmp$status != 0 ) stop( gettext( 
+      "Procedure aborted" ), domain = NA )
+   #--------------------------------------------
+   return(tmp)
+}

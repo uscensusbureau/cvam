@@ -1,7 +1,7 @@
 
-R version 3.5.2 (2018-12-20) -- "Eggshell Igloo"
-Copyright (C) 2018 The R Foundation for Statistical Computing
-Platform: x86_64-redhat-linux-gnu (64-bit)
+R version 4.0.4 (2021-02-15) -- "Lost Library Book"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-w64-mingw32/x64 (64-bit)
 
 R is free software and comes with ABSOLUTELY NO WARRANTY.
 You are welcome to redistribute it under certain conditions.
@@ -462,7 +462,7 @@ Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
 Model 2: ~ Sex * RH * PolViews * AbAny
   resid.df -2*loglik df change   pval
 1       34    -23618                 
-2        0    -23661 34 43.085 0.1366
+2        0    -23661 34 43.091 0.1364
 > print( anova( myMod, satMod, method="AIC" ) )
 Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
 Model 2: ~ Sex * RH * PolViews * AbAny
@@ -502,14 +502,14 @@ Model 2: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
 +    control=list(critBoundary=1e+06 ) )
 Note: Estimate at or near boundary
 > print( round( get.fitted(satMod, type="prob")$fit, 6) )
- [1] 0.029066 0.039231 0.007533 0.002447 0.001595 0.003040 0.002963 0.000505
- [9] 0.064676 0.054623 0.016674 0.006016 0.004029 0.001908 0.003721 0.003368
+ [1] 0.029066 0.039228 0.007533 0.002446 0.001595 0.003044 0.002963 0.000505
+ [9] 0.064676 0.054623 0.016674 0.006016 0.004030 0.001907 0.003721 0.003368
 [17] 0.066472 0.045043 0.009213 0.003694 0.001559 0.001708 0.007848 0.003118
-[25] 0.095406 0.095289 0.018363 0.005178 0.001465 0.000009 0.007574 0.010448
-[33] 0.095604 0.052460 0.022985 0.022681 0.007306 0.003610 0.010528 0.009189
+[25] 0.095406 0.095293 0.018363 0.005178 0.001465 0.000000 0.007574 0.010448
+[33] 0.095604 0.052458 0.022985 0.022680 0.007306 0.003615 0.010528 0.009189
 [41] 0.042217 0.036816 0.010613 0.009881 0.002851 0.000000 0.009341 0.003602
-[49] 0.005072 0.006238 0.001320 0.001171 0.000000 0.000980 0.000572 0.001010
-[57] 0.008873 0.007538 0.001618 0.000905 0.000001 0.000000 0.001497 0.000000
+[49] 0.005072 0.006238 0.001320 0.001171 0.000000 0.000981 0.000572 0.001010
+[57] 0.008873 0.007538 0.001618 0.000905 0.000000 0.000000 0.001497 0.000000
 [65] 0.005163 0.002090 0.000000 0.000832 0.000000 0.001656 0.000000 0.000000
 > 
 > myPrior <- cvamPrior( flatten=7.2 )
@@ -522,7 +522,7 @@ Model 1: ~ Sex * RH * PolViews + AbAny * Sex + AbAny * RH + AbAny * PolViews
 Model 2: ~ Sex * RH * PolViews * AbAny
   resid.df -2*logP df change   pval
 1       34  -23654                 
-2        0  -23692 34 38.646 0.2677
+2        0  -23692 34 38.647 0.2677
 > 
 > # re-run EM with a ridge factor of 0.5
 > fitEM <- cvam( ~ Sex * RH * PolViews * AbAny, data=dF )
@@ -680,4 +680,4 @@ Sex1:RH3:PolViews.Q:AbAny2  0.592037 0.6059  0.98 0.3285
 > 
 > proc.time()
    user  system elapsed 
-  2.369   0.085   2.419 
+   2.26    0.06    2.29 

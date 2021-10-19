@@ -4,6 +4,7 @@
 "advance_cell_random_part_estimate                                       ",&
 "advance_to_next_cell                                                    ",&
 "advance_to_next_cell_2                                                  ",&
+"apply_survey_weight                                                     ",&
 "check_lcprev_loglik_derivs_args                                         ",&
 "check_mlogit_args                                                       ",&
 "check_mlogit_loglik_derivs_args                                         ",&
@@ -11,15 +12,19 @@
 "compute_center_and_scale_beta_da                                        ",&
 "compute_estimate_SEs                                                    ",&
 "compute_estimates                                                       ",&
+"compute_freq_data_patt_expected_logit                                   ",&
 "compute_lambda_from_beta                                                ",&
 "compute_lik_table                                                       ",&
 "compute_lik_values                                                      ",&
+"compute_logP_A_score_hess_logit                                         ",&
+"compute_logP_score_hess_logit                                           ",&
 "compute_logP_score_hessian_beta_da                                      ",&
 "compute_log_proposal_beta                                               ",&
 "compute_loglik_logprior                                                 ",&
 "compute_ls_fit                                                          ",&
 "compute_mu_from_beta                                                    ",&
 "compute_pi_mat                                                          ",&
+"compute_pimat_logit                                                     ",&
 "compute_predictions                                                     ",&
 "compute_scale_rwm                                                       ",&
 "compute_score_hess_lcprev                                               ",&
@@ -61,7 +66,9 @@
 "fill_input_data_with_missing                                            ",&
 "flatten_table                                                           ",&
 "flatten_table_with_derivs                                               ",&
+"get_beta_logit                                                          ",&
 "get_integer_table_values                                                ",&
+"get_lcmeas_params                                                       ",&
 "get_randgen_state_R                                                     ",&
 "get_real_table_values                                                   ",&
 "get_string_table_values                                                 ",&
@@ -106,7 +113,10 @@
 "normalize_prob                                                          ",&
 "nullify_table                                                           ",&
 "nullify_workspace_type_cvam                                             ",&
+"nullify_workspace_type_cvam_basic                                       ",&
 "nullify_workspace_type_cvam_estimate                                    ",&
+"nullify_workspace_type_cvam_lcmeas                                      ",&
+"nullify_workspace_type_cvam_logit                                       ",&
 "nullify_workspace_type_cvam_predict                                     ",&
 "nullify_workspace_type_int_array_1d                                     ",&
 "nullify_workspace_type_int_array_2d                                     ",&
@@ -122,6 +132,7 @@
 "pt_R                                                                    ",&
 "punif_R                                                                 ",&
 "put_ctrl_into_workspace                                                 ",&
+"put_data_into_basic_workspace                                           ",&
 "put_data_into_workspace                                                 ",&
 "put_method_into_workspace                                               ",&
 "put_model_into_workspace                                                ",&
@@ -129,6 +140,7 @@
 "put_params_into_workspace                                               ",&
 "put_prior_into_workspace                                                ",&
 "put_randgen_state_R                                                     ",&
+"put_survey_objects_into_workspace                                       ",&
 "qbeta_R                                                                 ",&
 "qbinom_R                                                                ",&
 "qchisq_R                                                                ",&
@@ -155,7 +167,9 @@
 "run_cvam_estimate_em                                                    ",&
 "run_cvam_impute_freq                                                    ",&
 "run_cvam_impute_microdata                                               ",&
+"run_cvam_lcmeas                                                         ",&
 "run_cvam_lik                                                            ",&
+"run_cvam_logit                                                          ",&
 "run_cvam_model                                                          ",&
 "run_cvam_predict_em                                                     ",&
 "run_da_log_linear                                                       ",&
@@ -168,7 +182,10 @@
 "run_estep_with_derivs                                                   ",&
 "run_istep                                                               ",&
 "run_istep_microdata                                                     ",&
+"run_istep_single_row                                                    ",&
 "run_lcprev_loglik_derivs                                                ",&
+"run_logit_em                                                            ",&
+"run_logit_em_null                                                       ",&
 "run_mh_step_beta_da                                                     ",&
 "run_mlogit                                                              ",&
 "run_mlogit_loglik_derivs                                                ",&
@@ -176,6 +193,8 @@
 "run_rwm_log_linear                                                      ",&
 "run_rwm_step_beta                                                       ",&
 "runif_R                                                                 ",&
+"setup_lcmeas_workspace                                                  ",&
+"setup_logit_workspace                                                   ",&
 "start_val_log_linear                                                    ",&
 "start_val_saturated                                                     ",&
 "str1_alloc                                                              ",&
@@ -196,6 +215,7 @@
 "tabulate_string_variable                                                ",&
 "trigamma_R                                                              ",&
 "update_freq_mean                                                        ",&
+"update_lcmeas_params                                                    ",&
 "update_running_means                                                    ",&
 "write_integer_tree_to_table                                             ",&
 "write_real_tree_to_table                                                ",&

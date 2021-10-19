@@ -1,7 +1,7 @@
 
-R version 3.5.2 (2018-12-20) -- "Eggshell Igloo"
-Copyright (C) 2018 The R Foundation for Statistical Computing
-Platform: x86_64-redhat-linux-gnu (64-bit)
+R version 4.0.4 (2021-02-15) -- "Lost Library Book"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-w64-mingw32/x64 (64-bit)
 
 R is free software and comes with ABSOLUTELY NO WARRANTY.
 You are welcome to redistribute it under certain conditions.
@@ -358,10 +358,10 @@ B     neg pos
 +    SE.list[[m]] <- c( SE.1, SE.2 )
 + }
 > print( miInference( est.list, SE.list ) )
-        Est      SE Est/SE           df     p Pct.mis
-[1,] 1.7716 0.54868  3.229 1.032946e+06 0.001     0.3
-[2,] 3.2311 2.03440  1.588 3.049459e+12 0.112     0.0
+        Est      SE Est/SE         df     p Pct.mis
+[1,] 1.7849 0.55982  3.188    23011.2 0.001       2
+[2,] 3.2196 2.03440  1.583 56542162.4 0.114       0
 > 
 > proc.time()
    user  system elapsed 
-  0.665   0.066   0.696 
+   0.60    0.04    0.62 

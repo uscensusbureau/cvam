@@ -12,7 +12,7 @@ module cvam_engine
    implicit none
    private ! by default
    ! declare public types (contents are still private)
-   public :: workspace_type_cvam
+   public :: workspace_type_cvam, workspace_type_cvam_basic
    ! declare public parameters
    public :: model_type_str_len
    ! declare public procedures
@@ -20,7 +20,8 @@ module cvam_engine
         run_cvam_estimate_em, run_cvam_predict_em, &
         run_cvam_impute_freq, run_cvam_impute_microdata, &
         run_cvam_lik, run_mlogit, run_mlogit_loglik_derivs, &
-        run_lcprev_loglik_derivs
+        run_lcprev_loglik_derivs, nullify_workspace_type_cvam_basic, &
+        run_cvam_logit, run_cvam_lcmeas
    ! parameters private to this module
    real(kind=our_dble), parameter :: &
         log_huge = log( huge( real(0,kind=our_dble) ) ), &
@@ -147,7 +148,7 @@ module cvam_engine
       !  n_base_levels = integer( ncol_input_data )
       !  n_coarse_levels = integer( ncol_input_data )
       !  n_levels = integer( ncol_input_data )
-      !  fixed_in_all = logical( ncol_input_data )
+      !  fixed = logical( ncol_input_data )
       !  mapping = ragged 3d integer array to hold the mappings from
       !     the levels in input_data to base levels
       private
@@ -242,14 +243,15 @@ module cvam_engine
       integer(kind=our_int), allocatable :: freq_int(:) ! length ncells
       real(kind=our_dble), allocatable :: prob(:) ! length ncells
       real(kind=our_dble), allocatable :: prob_new(:) ! length ncells
+      real(kind=our_dble), allocatable :: mu(:) ! length ncells
+      real(kind=our_dble), allocatable :: mu_new(:) ! length ncells
+      real(kind=our_dble), allocatable :: logmu(:) ! length ncells
+      real(kind=our_dble), allocatable :: mu_old(:) ! length ncells
       ! these are never allocated if model_type is "saturated"
       real(kind=our_dble), allocatable :: beta(:) ! length p
       real(kind=our_dble), allocatable :: beta_new(:) ! length p
       real(kind=our_dble), allocatable :: beta_null(:) ! length p
       real(kind=our_dble), allocatable :: beta_hat(:) ! length p
-      real(kind=our_dble), allocatable :: mu(:) ! length n
-      real(kind=our_dble), allocatable :: mu_old(:) ! length n
-      real(kind=our_dble), allocatable :: logmu(:) ! length n
       integer(kind=our_int) :: ncells_nonzero = 0
       integer(kind=our_int) :: degrees_of_freedom = 0
       ! workspaces that are never allocated if model_type is "saturated"
@@ -339,7 +341,190 @@ module cvam_engine
       integer(kind=our_int) :: imp_count = 0
       logical :: store_this_iter = .false.
       logical :: imp_this_iter = .false.
+      ! survey objects
+      logical :: survey_mode = .false.
+      integer(kind=our_int) :: n_strat = 0
+      integer(kind=our_int), allocatable :: n_clus(:)
+      integer(kind=our_int) :: n_clus_tot = 0
+      integer(kind=our_int), allocatable :: stratum(:)
+      integer(kind=our_int), allocatable :: cluster(:)
+      logical, allocatable :: subpop(:)
+      real(kind=our_dble), allocatable :: weight(:)
+      real(kind=our_dble), allocatable :: scaled_weight(:)
+      integer(kind=our_int) :: n_subpop = 0
+      integer(kind=our_int) :: n_subpop_data_use = 0
+      real(kind=our_dble) :: total_weight_subpop = 0.D0
+      integer(kind=our_int), allocatable :: stratum_for_cluster(:)
+      ! objects for computing standard errors in survey mode
+      ! under a log-linear model, these are never allocated if
+      ! model_type is saturated or if survey_mode is .false.
+      real(kind=our_dble), allocatable :: ht_total_score_cluster(:,:)
+      real(kind=our_dble), allocatable :: ht_total_score_stratum(:,:)
+
+
    end type workspace_type_cvam
+   !###################################################################
+   type :: workspace_type_cvam_logit
+      ! for fitting a single multinomial logit model with a coarsened
+      ! response
+      ! This workspace stores the frequencies, but not the response
+      ! variable or the matrix of predictors
+      character(len=method_str_len) :: method = ""
+      character(len=method_str_len) :: prior = ""
+      integer(kind=our_int) :: nrow = 0 ! number of data rows
+      integer(kind=our_int) :: nlev = 0 ! number of response categories
+      integer(kind=our_int) :: ncol_x = 0 ! number of active predictors
+      integer(kind=our_int), allocatable :: xcol(:) ! positions of
+      !    active predictors in the columns of predictor matrix
+      integer(kind=our_int) :: ycol ! position in y matrix
+      real(kind=our_dble), allocatable :: beta(:) ! vectorized matrix
+      !    of predictors, excluding the baseline category
+      real(kind=our_dble), allocatable :: pimat(:,:)  ! matrix
+      !    of fitted probabilities corresponding to beta for distinct
+      !    covariate patterns
+      real(kind=our_dble), allocatable :: pinull(:)  ! vector of
+      !    fitted probabilities under the no-predictors model
+      real(kind=our_dble), allocatable :: pinull_new(:)
+      integer(kind=our_int) :: baseline = 0 ! baseline category
+      integer(kind=our_int) :: n = 0 ! same as nrow
+      integer(kind=our_int) :: r = 0 ! same as nlev
+      integer(kind=our_int) :: p = 0 ! same as ncolx
+      integer(kind=our_int) :: d = 0 ! same as p*(r-1)
+      integer(kind=our_int) :: n_data_patt = 0 ! number of distinct
+      !    data patterns
+      integer(kind=our_int), allocatable :: row_posn_data_patt(:)
+      integer(kind=our_int), allocatable :: freq_int_data_patt(:)
+      real(kind=our_dble), allocatable :: freq_data_patt(:)
+      real(kind=our_dble), allocatable :: pistar_data_patt(:)
+      integer(kind=our_int) :: n_cov_patt = 0 ! number of distinct
+      !    covariate patterns
+      integer(kind=our_int), allocatable :: row_posn_cov_patt(:)
+      integer(kind=our_int), allocatable :: cov_patt_for_data_patt(:)
+      integer(kind=our_int), allocatable :: data_patt_st(:)
+      integer(kind=our_int), allocatable :: data_patt_fin(:)
+      ! table of marginal frequencies for coarsened response
+      integer(kind=our_int), allocatable :: ystar_table(:)
+      ! objects for running EM on marginal frequencies
+      real(kind=our_dble) :: crit_em_null = 0.D0
+      real(kind=our_dble) :: flatten_em_null = 0.D0
+      real(kind=our_dble) :: prior_freq_tot_DAP = 0.D0
+      integer(kind=our_int) :: iter_max_em_null = 0
+      logical :: converged_em_null = .false.
+      integer(kind=our_int) :: iter_em_null = 0
+      ! objects for model fitting
+      real(kind=our_dble) :: crit_em = 0.D0
+      integer(kind=our_int) :: iter_max_em = 0
+      logical :: converged_em = .false.
+      integer(kind=our_int) :: iter_em = 0
+      real(kind=our_dble) :: max_diff_em = 0.D0
+      real(kind=our_dble) :: crit_nr = 0.D0
+      integer(kind=our_int) :: iter_max_nr = 0
+      logical :: converged_nr = .false.
+      integer(kind=our_int) :: iter_nr = 0
+      real(kind=our_dble) :: max_diff_nr = 0.D0
+      logical :: start_val_use = .false.
+      real(kind=our_dble), allocatable :: loglik_vec(:)
+      real(kind=our_dble), allocatable :: logP_vec(:)
+      real(kind=our_dble), allocatable :: beta_new(:)
+      real(kind=our_dble), allocatable :: beta_nr(:)
+      real(kind=our_dble), allocatable :: beta_nr_new(:)
+      real(kind=our_dble), allocatable :: beta_tmp(:)
+      real(kind=our_dble) :: loglik   ! observed-data loglikelihood
+      real(kind=our_dble) :: loglik_A ! augmented-data loglikelihood
+      real(kind=our_dble) :: logprior ! log-prior-density
+      real(kind=our_dble), allocatable :: prior_freq_cov_patt(:)
+      real(kind=our_dble), allocatable :: log_pi_cov_patt(:)
+      real(kind=our_dble), allocatable :: score(:)
+      real(kind=our_dble), allocatable :: score_A(:)
+      real(kind=our_dble), allocatable :: hess(:,:)
+      real(kind=our_dble), allocatable :: hess_A(:,:)
+      real(kind=our_dble), allocatable :: freq_data_patt_expected(:,:)
+      real(kind=our_dble), allocatable :: freq_cov_patt_expected(:)
+      logical, allocatable :: active_y(:)
+      real(kind=our_dble), allocatable :: dldpi(:)
+      real(kind=our_dble), allocatable :: dldpi_A(:)
+      real(kind=our_dble), allocatable :: dpidbeta(:,:)
+      real(kind=our_dble), allocatable :: d2ldpi2(:,:)
+      real(kind=our_dble), allocatable :: d2ldpi2_A(:,:)
+      real(kind=our_dble), allocatable :: d2pidbeta2(:,:,:)
+      real(kind=our_dble), allocatable :: vhat_beta(:,:)
+      ! workspaces
+      real(kind=our_dble), allocatable :: wkrA(:)
+      real(kind=our_dble), allocatable :: wkrB(:)
+      real(kind=our_dble), allocatable :: wkdA(:)
+      real(kind=our_dble), allocatable :: wkdB(:)
+      real(kind=our_dble), allocatable :: wkddA(:,:)
+      real(kind=our_dble), allocatable :: wkddB(:,:)
+   end type workspace_type_cvam_logit
+   !###################################################################
+   type :: workspace_type_cvam_lcmeas
+      ! for fitting a latent-class measurement model with coarsened
+      ! responses
+      character(len=method_str_len) :: method = ""
+      character(len=method_str_len) :: logit_prior = ""
+      integer(kind=our_int) :: nrow   ! number of rows / data patterns
+      integer(kind=our_int) :: nitem  ! number of measurement items
+      integer(kind=our_int) :: nclass ! number of latent classes
+      integer(kind=our_int) :: nparams ! length of params vector
+      integer(kind=our_int), allocatable :: ycol_item(:)
+      integer(kind=our_int), allocatable :: mvcode_item(:)
+      integer(kind=our_int) :: ycol_latent = 0
+      integer(kind=our_int) :: mvcode_latent = 0
+      real(kind=our_dble), allocatable :: prevalence(:)
+      real(kind=our_dble), allocatable :: prevalence_new(:)
+      real(kind=our_dble), allocatable :: post_prob(:,:)
+      ! array of logit workspaces, with dimensions (nclass, nitem)
+      type(workspace_type_cvam_logit), allocatable :: logit(:,:)
+      ! these point to the covariate patterns and data patterns in the
+      ! logit workspaces, which are indexed by item
+      integer(kind=our_int), allocatable :: logit_cov_patt(:,:)
+      integer(kind=our_int), allocatable :: logit_data_patt(:,:)
+      real(kind=our_dble) :: crit_em = 0.D0
+      integer(kind=our_int) :: iter_max_em = 0
+      logical :: converged_em = .false.
+      integer(kind=our_int) :: iter_em = 0
+      real(kind=our_dble) :: max_diff_em = 0.D0
+      real(kind=our_dble) :: start_val_jitter = 0.D0
+      real(kind=our_dble) :: loglik = 0.D0
+      real(kind=our_dble) :: logP = 0.D0
+      real(kind=our_dble) :: logprior = 0.D0
+      real(kind=our_dble), allocatable :: loglikvec(:)
+      real(kind=our_dble), allocatable :: logPvec(:)
+   end type workspace_type_cvam_lcmeas
+   !###################################################################
+   type :: workspace_type_cvam_basic
+      ! holds a matrix of coarsened response variables, a matrix of
+      ! unmodeled predictors, and frequencies, plus additional objects
+      ! that are model-specific
+      !  ystar(:,:) = integer( nrow_data, ncol_y)
+      !     = matrix of coarsened data patterns
+      !  pred(:,:) = real(nrow_data, ncol_pred)
+      !  data_freq = real( nrow_data )
+      !     = vector of frequencies associated with ystar
+      !  n_base_levels = integer( ncol_ystar )
+      !  n_coarse_levels = integer( ncol_ystar )
+      !  n_levels = integer( ncol_ystar )
+      !  mapping = ragged 3d integer array to hold the mappings from
+      !     the levels in input_data to base levels
+      character(len=model_type_str_len) :: model_type = ""
+      integer(kind=our_int) :: nrow_data = 0
+      integer(kind=our_int) :: ncol_y = 0
+      integer(kind=our_int) :: ncol_pred = 0
+      integer(kind=our_int), allocatable :: ystar(:,:)
+      real(kind=our_dble), allocatable :: pred(:,:)
+      integer(kind=our_int), allocatable :: data_freq_int(:)
+      real(kind=our_dble), allocatable :: data_freq(:)
+      integer(kind=our_int) :: data_freq_tot = 0
+      integer(kind=our_int), allocatable :: n_base_levels(:)
+      integer(kind=our_int), allocatable :: n_coarse_levels(:)
+      integer(kind=our_int), allocatable :: n_levels(:)
+      type(workspace_type_int_array_3d) :: mapping
+      integer(kind=our_int) :: nitem = 0 ! same as ncol_ystar
+      integer(kind=our_int), allocatable :: nlev(:)  !  same as n_base_levels
+      integer(kind=our_int), allocatable :: mvcode(:)  ! length nitem
+      type(workspace_type_cvam_logit) :: logit
+      type(workspace_type_cvam_lcmeas) :: lcmeas
+   end type workspace_type_cvam_basic
    !###################################################################
    contains
    !###################################################################
@@ -743,6 +928,22 @@ module cvam_engine
          deallocate( work%prob_new, stat=status )
          if( status /= 0 ) goto 800
       end if
+      if( allocated( work%mu ) ) then
+         deallocate( work%mu, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%mu_new ) ) then
+         deallocate( work%mu_new, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%logmu ) ) then
+         deallocate( work%logmu, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%mu_old ) ) then
+         deallocate( work%mu_old, stat=status )
+         if( status /= 0 ) goto 800
+      end if
       if( allocated( work%beta ) ) then
          deallocate( work%beta, stat=status )
          if( status /= 0 ) goto 800
@@ -757,18 +958,6 @@ module cvam_engine
       end if
       if( allocated( work%beta_hat ) ) then
          deallocate( work%beta_hat, stat=status )
-         if( status /= 0 ) goto 800
-      end if
-      if( allocated( work%mu ) ) then
-         deallocate( work%mu, stat=status )
-         if( status /= 0 ) goto 800
-      end if
-      if( allocated( work%mu_old ) ) then
-         deallocate( work%mu_old, stat=status )
-         if( status /= 0 ) goto 800
-      end if
-      if( allocated( work%logmu ) ) then
-         deallocate( work%logmu, stat=status )
          if( status /= 0 ) goto 800
       end if
       work%ncells_nonzero = 0
@@ -885,9 +1074,6 @@ module cvam_engine
          if( status /= 0 ) goto 800
       end if
       work%vhat_ok = .false.
-      ! normal exit
-      answer = RETURN_SUCCESS
-      return
       work%begin_cycle_2 = .false.
       work%cycle_done_2 = .false.
       if( allocated( work%var_2 ) ) then
@@ -982,10 +1168,430 @@ module cvam_engine
       work%imp_count = 0
       work%store_this_iter = .false.
       work%imp_this_iter = .false.
-      ! error trapa
+      work%survey_mode = .false.
+      work%n_strat = 0
+      if( allocated( work%n_clus ) ) then
+         deallocate( work%n_clus, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%n_clus_tot = 0
+      if( allocated( work%stratum ) ) then
+         deallocate( work%stratum, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%cluster ) ) then
+         deallocate( work%cluster, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%subpop ) ) then
+         deallocate( work%subpop, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%weight ) ) then
+         deallocate( work%weight, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%scaled_weight ) ) then
+         deallocate( work%scaled_weight, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%n_subpop = 0
+      work%n_subpop_data_use = 0
+      work%total_weight_subpop = 0.D0
+      if( allocated( work%stratum_for_cluster ) ) then
+         deallocate( work%stratum_for_cluster, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%ht_total_score_cluster ) ) then
+         deallocate( work%ht_total_score_cluster, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%ht_total_score_stratum ) ) then
+         deallocate( work%ht_total_score_stratum, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      ! normal exit
+      answer = RETURN_SUCCESS
+      return
+      ! error trap
 800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
    end function nullify_workspace_type_cvam
    !##################################################################
+   integer(kind=our_int) function nullify_workspace_type_cvam_logit( &
+        work, err ) result( answer )
+      implicit none
+      ! args
+      type(workspace_type_cvam_logit), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! locals
+      character(len=*), parameter :: &
+           subname = "nullify_workspace_type_cvam_logit"
+      integer(kind=our_int) :: status
+      ! begin
+      answer = RETURN_FAIL
+      work%method = ""
+      work%prior = ""
+      work%nrow = 0
+      work%nlev = 0
+      work%ncol_x = 0
+      if( allocated( work%xcol ) ) then
+         deallocate( work%xcol, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%ycol = 0
+      if( allocated( work%beta ) ) then
+         deallocate( work%beta, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%pimat ) ) then
+         deallocate( work%pimat, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%pinull ) ) then
+         deallocate( work%pinull, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%pinull_new ) ) then
+         deallocate( work%pinull_new, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%baseline = 0
+      work%n = 0
+      work%r = 0
+      work%p = 0
+      work%d = 0
+      work%n_data_patt = 0
+      if( allocated( work%row_posn_data_patt ) ) then
+         deallocate( work%row_posn_data_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%freq_int_data_patt ) ) then
+         deallocate( work%freq_int_data_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%freq_data_patt ) ) then
+         deallocate( work%freq_data_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%pistar_data_patt ) ) then
+         deallocate( work%pistar_data_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%n_cov_patt = 0
+      if( allocated( work%row_posn_cov_patt ) ) then
+         deallocate( work%row_posn_cov_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%cov_patt_for_data_patt ) ) then
+         deallocate( work%cov_patt_for_data_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%data_patt_st ) ) then
+         deallocate( work%data_patt_st, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%data_patt_fin ) ) then
+         deallocate( work%data_patt_fin, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%ystar_table ) ) then
+         deallocate( work%ystar_table, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%crit_em_null = 0.D0
+      work%flatten_em_null = 0.D0
+      work%prior_freq_tot_DAP = 0.D0
+      work%iter_max_em_null = 0
+      work%iter_em_null = 0
+      work%converged_em_null = .false.
+      !
+      work%crit_em = 0.D0
+      work%iter_max_em = 0
+      work%converged_em = .false.
+      work%iter_em = 0
+      work%max_diff_em = 0.D0
+      work%start_val_use = .false.
+      !
+      work%crit_nr = 0.D0
+      work%iter_max_nr = 0
+      work%converged_nr = .false.
+      work%iter_nr = 0
+      work%max_diff_nr = 0.D0
+      !
+      if( allocated( work%loglik_vec ) ) then
+         deallocate( work%loglik_vec, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%logP_vec ) ) then
+         deallocate( work%logP_vec, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%beta_new ) ) then
+         deallocate( work%beta_new, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%beta_nr ) ) then
+         deallocate( work%beta_nr, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%beta_nr_new ) ) then
+         deallocate( work%beta_nr_new, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%beta_tmp ) ) then
+         deallocate( work%beta_tmp, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%loglik = 0.D0
+      work%loglik_A = 0.D0
+      work%logprior = 0.D0
+      if( allocated( work%prior_freq_cov_patt ) ) then
+         deallocate( work%prior_freq_cov_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%log_pi_cov_patt ) ) then
+         deallocate( work%log_pi_cov_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%score ) ) then
+         deallocate( work%score, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%score_A ) ) then
+         deallocate( work%score_A, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%hess ) ) then
+         deallocate( work%hess, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%hess_A ) ) then
+         deallocate( work%hess_A, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%freq_data_patt_expected ) ) then
+         deallocate( work%freq_data_patt_expected, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%freq_cov_patt_expected ) ) then
+         deallocate( work%freq_cov_patt_expected, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%active_y ) ) then
+         deallocate( work%active_y, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%vhat_beta ) ) then
+         deallocate( work%vhat_beta, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%dldpi ) ) then
+         deallocate( work%dldpi, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%dldpi_A ) ) then
+         deallocate( work%dldpi_A, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%dpidbeta ) ) then
+         deallocate( work%dpidbeta, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%d2ldpi2 ) ) then
+         deallocate( work%d2ldpi2, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%d2ldpi2_A ) ) then
+         deallocate( work%d2ldpi2_A, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%d2pidbeta2 ) ) then
+         deallocate( work%d2pidbeta2, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      !
+      if( allocated( work%wkrA ) ) then
+         deallocate( work%wkRA, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%wkrB ) ) then
+         deallocate( work%wkRB, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%wkdA ) ) then
+         deallocate( work%wkdA, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%wkdB ) ) then
+         deallocate( work%wkdB, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%wkddA ) ) then
+         deallocate( work%wkddA, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%wkddB ) ) then
+         deallocate( work%wkddB, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      ! normal exit
+      answer = RETURN_SUCCESS
+      return
+      ! error trap
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+   end function nullify_workspace_type_cvam_logit
+   !##################################################################
+   integer(kind=our_int) function nullify_workspace_type_cvam_lcmeas( &
+        work, err ) result( answer )
+      implicit none
+      ! args
+      type(workspace_type_cvam_lcmeas), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! locals
+      character(len=*), parameter :: &
+           subname = "nullify_workspace_type_cvam_lcmeas"
+      integer(kind=our_int) :: status, c, j
+      ! begin
+      answer = RETURN_FAIL
+      work%method = ""
+      work%logit_prior = ""
+      work%nrow = 0
+      work%nitem = 0
+      work%nclass = 0
+      work%nparams = 0
+      if( allocated( work%ycol_item ) ) then
+         deallocate( work%ycol_item, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%mvcode_item ) ) then
+         deallocate( work%mvcode_item, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%ycol_latent = 0
+      work%mvcode_latent = 0
+      if( allocated( work%prevalence ) ) then
+         deallocate( work%prevalence, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%prevalence_new ) ) then
+         deallocate( work%prevalence_new, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%post_prob ) ) then
+         deallocate( work%post_prob, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%logit ) ) then
+         do c = 1, size(work%logit, 1)
+            do j = 1, size(work%logit, 2)
+               if( nullify_workspace_type_cvam_logit( work%logit(c,j), err ) &
+                    == RETURN_FAIL ) goto 800
+            end do
+         end do
+         deallocate( work%logit, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%logit_cov_patt ) ) then
+         deallocate( work%logit_cov_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%logit_data_patt ) ) then
+         deallocate( work%logit_data_patt, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      !
+      work%crit_em = 0.D0
+      work%iter_max_em = 0
+      work%converged_em = .false.
+      work%iter_em = 0
+      work%max_diff_em = 0.D0
+      work%start_val_jitter = 0.D0
+      work%loglik = 0.D0
+      work%logP = 0.D0
+      work%logprior = 0.D0
+      if( allocated( work%loglikvec ) ) then
+         deallocate( work%loglikvec, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%logPvec ) ) then
+         deallocate( work%logPvec, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      ! normal exit
+      answer = RETURN_SUCCESS
+      return
+      ! error trap
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+    end function nullify_workspace_type_cvam_lcmeas
+  !##################################################################
+   integer(kind=our_int) function nullify_workspace_type_cvam_basic( &
+        work, err ) result( answer )
+      implicit none
+      ! args
+      type(workspace_type_cvam_basic), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! locals
+      character(len=*), parameter :: &
+           subname = "nullify_workspace_type_cvam_basic"
+      integer(kind=our_int) :: status
+      ! begin
+      answer = RETURN_FAIL
+      work%model_type = ""
+      work%nrow_data = 0
+      work%ncol_y = 0
+      work%ncol_pred = 0
+      if( allocated( work%ystar ) ) then
+         deallocate( work%ystar, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%pred ) ) then
+         deallocate( work%pred, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%data_freq_int ) ) then
+         deallocate( work%data_freq_int, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%data_freq ) ) then
+         deallocate( work%data_freq, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      work%data_freq_tot = 0
+      if( allocated( work%n_base_levels ) ) then
+         deallocate( work%n_base_levels, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%n_coarse_levels ) ) then
+         deallocate( work%n_coarse_levels, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%n_levels ) ) then
+         deallocate( work%n_levels, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( nullify_workspace_type_int_array_3d( work%mapping, err ) &
+           == RETURN_FAIL ) goto 800
+      work%nitem = 0
+      if( allocated( work%nlev ) ) then
+         deallocate( work%nlev, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( allocated( work%mvcode ) ) then
+         deallocate( work%mvcode, stat=status )
+         if( status /= 0 ) goto 800
+      end if
+      if( nullify_workspace_type_cvam_logit( work%logit, err ) &
+           == RETURN_FAIL ) goto 800
+      if( nullify_workspace_type_cvam_lcmeas( work%lcmeas, err ) &
+           == RETURN_FAIL ) goto 800
+      !
+      ! normal exit
+      answer = RETURN_SUCCESS
+      return
+      ! error trap
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+    end function nullify_workspace_type_cvam_basic
+  !##################################################################
    integer(kind=our_int) function run_cvam_model( &
         model_type_int, method_int, &
         input_data, input_data_freq_int, n_levels_matrix, packed_map, &
@@ -1003,15 +1609,18 @@ module cvam_engine
         save_prob_series_int, type_mcmc_int, stuck_limit, &
         iter_approx_bayes, impute_approx_bayes_int, &
         df_da, step_size_da, scale_fac_da, df_rwm, scale_fac_rwm, &
+        ! survey info
+        survey_mode_int, n_strat, n_clus, design_int, weight, &
         ! inout arguments
-        prob, beta, beta_hat, vhat_beta_rwm, &
+        mu, beta, beta_hat, vhat_beta_rwm, &
         ! workspaces
         work, err, &
         ! outputs
-        iter, converged, max_diff, loglik, logP, lambda, &
+        iter, converged, max_diff, loglik, logP, prob, lambda, &
         freq, freq_mean, freq_int, &
         score, vhat_beta, prob_mean, beta_mean, beta_cov_mat, &
         total_freq_use_prior, total_freq_use_data_int, &
+        total_freq_subpop_int, &
         degrees_of_freedom, &
         packed_estimates, packed_estimates_mean, packed_SEs, &
         beta_series, prob_series, logp_series, imputed_freq_int, &
@@ -1060,8 +1669,13 @@ module cvam_engine
       real(kind=our_dble), intent(in) :: scale_fac_da
       real(kind=our_dble), intent(in) :: df_rwm
       real(kind=our_dble), intent(in) :: scale_fac_rwm
+      integer(kind=our_int), intent(in) :: survey_mode_int
+      integer(kind=our_int), intent(in) :: n_strat
+      integer(kind=our_int), intent(in) :: n_clus(:)
+      integer(kind=our_int), intent(in) :: design_int(:,:)
+      real(kind=our_dble), intent(in) :: weight(:)
       ! declare inouts
-      real(kind=our_dble), intent(inout) :: prob(:)
+      real(kind=our_dble), intent(inout) :: mu(:)
       real(kind=our_dble), intent(inout) :: beta(:)
       real(kind=our_dble), intent(inout) :: beta_hat(:)
       real(kind=our_dble), intent(inout) :: vhat_beta_rwm(:,:)
@@ -1074,6 +1688,7 @@ module cvam_engine
       real(kind=our_dble), intent(out) :: max_diff
       real(kind=our_dble), intent(out) :: loglik(:)
       real(kind=our_dble), intent(out) :: logP(:)
+      real(kind=our_dble), intent(out) :: prob(:)
       real(kind=our_dble), intent(out) :: lambda(:)
       real(kind=our_dble), intent(out) :: freq(:)
       real(kind=our_dble), intent(out) :: freq_mean(:)
@@ -1085,6 +1700,7 @@ module cvam_engine
       real(kind=our_dble), intent(out) :: beta_cov_mat(:,:)
       real(kind=our_dble), intent(out) :: total_freq_use_prior
       integer(kind=our_int), intent(out) :: total_freq_use_data_int
+      integer(kind=our_int), intent(out) :: total_freq_subpop_int
       integer(kind=our_int), intent(out) :: degrees_of_freedom
       real(kind=our_dble), intent(out) :: packed_estimates(:)
       real(kind=our_dble), intent(out) :: packed_estimates_mean(:)
@@ -1126,10 +1742,20 @@ module cvam_engine
            iter_approx_bayes, impute_approx_bayes_int, &
            df_da, step_size_da, scale_fac_da, df_rwm, scale_fac_rwm, &
            work, err ) == RETURN_FAIL ) goto 800
+      if( put_survey_objects_into_workspace( survey_mode_int, n_strat, &
+           n_clus, design_int, weight, &
+           work, err ) == RETURN_FAIL ) goto 800
       if( create_data_and_prior_use_objects( work, err ) &
            == RETURN_FAIL ) goto 800
       total_freq_use_prior = work%total_freq_use_prior
-      total_freq_use_data_int = work%total_freq_use_data_int
+      if( work%survey_mode ) then
+         total_freq_use_data_int = work%n_subpop_data_use
+         total_freq_subpop_int = work%n_subpop
+      else
+         total_freq_use_data_int = work%total_freq_use_data_int
+         total_freq_subpop_int = 0
+      end if
+      if( apply_survey_weight( work ) == RETURN_FAIL ) goto 800
       if( create_model_fitting_objects( work, err ) &
            == RETURN_FAIL ) goto 800
       degrees_of_freedom = work%degrees_of_freedom
@@ -1140,16 +1766,22 @@ module cvam_engine
            logp_series, imputed_freq_int, packed_estimates_series, &
            work, err ) == RETURN_FAIL ) goto 800
       if( work%model_type == "saturated" ) then
-         if( start_val_saturated( prob, work, err ) &
+         if( start_val_saturated( mu, work, err ) &
               == RETURN_FAIL ) goto 800
+         mu(:) = work%mu_new(:)
+         if( size(prob) /= work%ncells ) goto 5
          prob(:) = work%prob_new(:)
          work%prob(:) = work%prob_new(:)
+         work%mu(:) = work%mu_new(:)
       else if( work%model_type == "log-linear" ) then
          if( start_val_log_linear( beta, work, err ) &
               == RETURN_FAIL ) goto 800
+         mu(:) = work%mu_new(:)
+         if( size(prob) /= work%ncells ) goto 5
          prob(:) = work%prob_new(:)
          beta(:) = work%beta_new(:)
          work%beta(:) = work%beta_new(:)
+         work%mu(:) = work%mu_new(:)
       else
          goto 100
       end if
@@ -1213,8 +1845,10 @@ module cvam_engine
       !
       if( work%method == "EM" ) then
          prob(:) = work%prob_new(:)
+         mu(:) = work%mu_new(:)
          if( work%model_type == "log-linear" ) beta(:) = work%beta_new(:)
       else if( work%method == "MCMC" ) then
+         mu(:) = work%mu(:)
          prob(:) = work%prob(:)
          if( work%model_type == "log-linear" ) then
             beta(:) = work%beta(:)
@@ -1222,6 +1856,7 @@ module cvam_engine
          end if
       else if( work%method == "approxBayes" ) then
          prob(:) = work%prob(:)
+         mu(:) = work%mu(:)
          beta(:) = work%beta(:)
          work%beta_new(:) = work%beta(:) ! to prepare for lambda
       else
@@ -1323,6 +1958,9 @@ module cvam_engine
       answer = RETURN_SUCCESS
       goto 999
       ! error traps
+5     call err_handle(err, 1, &
+            comment = "Argument prob has incorrect size" )
+      goto 800
 10    call err_handle(err, 1, &
             comment = "Argument loglik has insufficient size" )
       goto 800
@@ -1935,6 +2573,163 @@ module cvam_engine
 999   continue
     end function put_ctrl_into_workspace
    !##################################################################
+   integer(kind=our_int) function put_survey_objects_into_workspace( &
+        survey_mode_int, n_strat, n_clus, design_int, weight, &
+        work, err ) result(answer)
+      implicit none
+      ! declare inputs
+      integer(kind=our_int), intent(in) :: survey_mode_int
+      integer(kind=our_int), intent(in) :: n_strat
+      integer(kind=our_int), intent(in) :: n_clus(:)
+      integer(kind=our_int), intent(in) :: design_int(:,:)
+      real(kind=our_dble), intent(in) :: weight(:)
+      ! declare workspaces
+      type(workspace_type_cvam), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! declare locals
+      integer(our_int) :: s, c, i, status
+      real(kind=our_dble) :: rtmp
+      character(len=*), parameter :: &
+           subname = "put_survey_objects_into_workspace"
+      ! begin
+      answer = RETURN_FAIL
+      if( survey_mode_int == 0 ) then
+         work%survey_mode = .false.
+      else
+         work%survey_mode = .true.
+      end if
+      !
+      if( work%survey_mode ) then
+         if( work%method == "MCMC" ) goto 50
+         if( n_strat <= 0 ) goto 200
+         work%n_strat = n_strat
+         if( size( n_clus ) /= work%n_strat ) goto 210
+         allocate( work%n_clus( work%n_strat ), stat=status )
+         if( status /= 0 ) goto 100
+         work%n_clus_tot = 0
+         do s = 1, work%n_strat
+            if( n_clus(s) <= 0 ) goto 220
+            work%n_clus(s) = n_clus(s)
+            work%n_clus_tot = work%n_clus_tot + work%n_clus(s)
+         end do
+         if( size( design_int, 1 ) /= work%nrow_input_data ) goto 230
+         if( size( design_int, 2 ) /= 3 ) goto 230
+         if( size( weight ) /= work%nrow_input_data ) goto 260
+         allocate( work%stratum( work%nrow_input_data ), &
+              work%cluster( work%nrow_input_data ), &
+              work%subpop( work%nrow_input_data ),  &
+              work%weight( work%nrow_input_data ),  &
+              work%scaled_weight( work%nrow_input_data ),  &
+              stat=status )
+         if( status /= 0 ) goto 100
+         work%n_subpop = 0
+         work%total_weight_subpop = 0.D0
+         do i = 1, work%nrow_input_data
+            s = design_int(i,1)
+            if( ( s < 0 ) .or. ( s > work%n_strat ) ) goto 240
+            work%stratum(i) = s
+            c = design_int(i,2)
+            if( ( c < 0 ) .or. ( c > work%n_clus_tot ) ) goto 250
+            work%cluster(i) = c
+            if( weight(i) < 0.D0 ) goto 270
+            work%weight(i) = weight(i)
+            if( design_int(i,3) == 0 ) then
+               work%subpop(i) = .false.
+            else
+               work%subpop(i) = .true.
+               work%n_subpop = work%n_subpop + 1
+               work%total_weight_subpop = work%total_weight_subpop &
+                    + work%weight(i)
+            end if
+         end do
+         if( work%total_weight_subpop <= 0.D0 ) goto 280
+         if( work%n_subpop <= 0 ) goto 290
+         rtmp = real( work%n_subpop, our_dble ) / work%total_weight_subpop
+         do i = 1, work%nrow_input_data
+            if( work%subpop(i) ) then
+               work%scaled_weight(i) = rtmp * work%weight(i)
+            else
+               work%scaled_weight(i) = 0.D0
+            end if
+         end do
+         allocate( work%stratum_for_cluster( work%n_clus_tot ), &
+              stat=status )
+         if( status /= 0 ) goto 100
+         work%stratum_for_cluster(:) = 0
+         do i = 1, work%nrow_input_data
+            s = work%stratum(i)
+            c = work%cluster(i)
+            if( work%stratum_for_cluster(c) == 0 ) then
+               work%stratum_for_cluster(c) = s
+            else
+               if( work%stratum_for_cluster(c) /= s ) goto 300
+            end if
+         end do
+         !
+         if( work%model_type == "log-linear" ) then
+            allocate( &
+                 work%ht_total_score_cluster( work%n_clus_tot, work%p ), &
+                 work%ht_total_score_stratum( work%n_strat, work%p ), &
+                 stat=status )
+            if( status /= 0 ) goto 100
+            work%ht_total_score_cluster(:,:) = 0.D0
+            work%ht_total_score_stratum(:,:) = 0.D0
+         end if
+      end if
+      ! normal exit
+      answer = RETURN_SUCCESS
+      goto 999
+      ! error traps
+50    call err_handle(err, 1, &
+            comment = "MCMC cannot be run with survey weights" )
+      goto 800
+100   call err_handle(err, 1, &
+            comment = "Unable to allocate workspace array component" )
+      goto 800
+200   call err_handle(err, 1, &
+            comment = "Non-positive value for n_strat" )
+      goto 800
+210   call err_handle(err, 1, &
+            comment = "Argument n_clus has incorrect size" )
+      goto 800
+220   call err_handle(err, 1, &
+            comment = "Element of n_clus is non-positive" )
+      goto 800
+230   call err_handle(err, 1, &
+            comment = "Argument design_int has incorrect shape" )
+      goto 800
+240   call err_handle(err, 1, &
+            comment = "Stratum indicator out of range" )
+      goto 800
+      call err_handle(err, 3, iobs=i)
+250   call err_handle(err, 1, &
+            comment = "Cluster indicator out of range" )
+      call err_handle(err, 3, iobs=i)
+      goto 800
+260   call err_handle(err, 1, &
+            comment = "Argument weight has incorrect size" )
+      goto 800
+270   call err_handle(err, 1, &
+            comment = "Negative survey weight encountered" )
+      call err_handle(err, 3, iobs=i)
+      goto 800
+280   call err_handle(err, 1, &
+            comment = "Total weight in sub-population is not positive" )
+      goto 800
+290   call err_handle(err, 1, &
+            comment = "Sub-population has no observations" )
+      goto 800
+300   call err_handle(err, 1, &
+            comment = "Stratum indicators not identical within clusters;" )
+      call err_handle(err, 1, &
+            comment = "consider using nested = TRUE" )
+      goto 800
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+      goto 999
+      ! cleanup
+999   continue
+    end function put_survey_objects_into_workspace
+   !##################################################################
    integer(kind=our_int) function create_data_and_prior_use_objects( &
         work, err ) result(answer)
       implicit none
@@ -1955,6 +2750,7 @@ module cvam_engine
       if( status /= 0 ) goto 100
       work%input_data_use(:) = .false.
       work%total_freq_use_data_int = 0
+      work%n_subpop_data_use = 0
       if( work%omit_data ) then
          ! nothing to do
       else
@@ -1978,6 +2774,30 @@ module cvam_engine
             end do
          end if
          work%total_freq_use_data_int = isum
+      end if
+      !
+      if( work%survey_mode ) then
+         do i = 1, work%nrow_input_data
+            if( work%subpop(i) ) then
+               if( work%exclude_all_na ) then
+                  work%input_data_use(i) = .false.
+                  do j = 1, work%nvar
+                     if( ( .not. work%fixed(j) ) .and. &
+                          ( work%input_data(i,j) /= work%mvcode(j) ) ) then
+                        work%input_data_use(i) = .true.
+                        exit
+                     end if
+                  end do
+               else
+                  ! use the observation
+                  work%input_data_use(i) = .true.
+               end if
+            else
+               work%input_data_use(i) = .false.
+            end if
+            if( work%input_data_use(i) ) work%n_subpop_data_use = &
+                 work%n_subpop_data_use + 1
+         end do
       end if
       !
       allocate( work%prior_data_use( work%nrow_prior_data ), &
@@ -2016,6 +2836,27 @@ module cvam_engine
 999   continue
     end function create_data_and_prior_use_objects
    !##################################################################
+   integer(kind=our_int) function apply_survey_weight( work ) &
+        result(answer)
+      implicit none
+      ! declare workspaces
+      type(workspace_type_cvam), intent(inout) :: work
+      ! declare localsn
+      character(len=*), parameter :: &
+           subname = "apply_survey_weight"
+      ! begin
+      answer = RETURN_FAIL
+      if( work%survey_mode ) then
+         work%input_data_freq(:) = work%scaled_weight(:)
+      end if
+      ! normal exit
+      answer = RETURN_SUCCESS
+      goto 999
+      ! error traps
+      ! cleanup
+999   continue
+    end function apply_survey_weight
+   !##################################################################
    integer(kind=our_int) function create_model_fitting_objects( &
         work, err ) result(answer)
       ! creates workspace arrays for fitting the model
@@ -2042,23 +2883,27 @@ module cvam_engine
       work%freq_int(:) = 0
       work%prob(:) = 0.D0
       work%prob_new(:) = 0.D0
+      allocate( work%mu( work%ncells ), work%mu_new( work%ncells ), &
+           work%logmu( work%ncells ), work%mu_old( work%ncells ), &
+           stat=status )
+      if( status /= 0 ) goto 100
+      work%mu(:) = 0.D0
+      work%mu_new(:) = 0.D0
+      work%logmu(:) = 0.D0
+      work%mu_old(:) = 0.D0
       !
       if( work%model_type == "saturated" ) then
-         ! n = p = 0 and beta, beta_new, mu, logmu are never allocated
+         ! n = p = 0 and beta, beta_new are never allocated
          work%degrees_of_freedom = 0
       else if( work%model_type == "log-linear" ) then
          allocate( work%beta( work%p ), work%beta_new( work%p ), &
               work%beta_null( work%p ), work%beta_hat( work%p ), &
-              work%mu( work%n ), work%mu_old( work%n ), &
-              work%logmu( work%n ), stat=status )
+              stat=status )
          if( status /= 0 ) goto 100
          work%beta(:) = 0.D0
          work%beta_new(:) = 0.D0
          work%beta_null(:) = 0.D0
          work%beta_hat(:) = 0.D0
-         work%mu(:) = 0.D0
-         work%mu_old(:) = 0.D0
-         work%logmu(:) = 0.D0
          work%degrees_of_freedom = work%ncells_nonzero - work%p
          allocate( work%wknA( work%n ), work%wkpA( work%p ), &
               work%wkpB( work%p ), work%beta_tmp( work%p ), &
@@ -2138,85 +2983,89 @@ module cvam_engine
 999   continue
     end function create_model_fitting_objects
    !##################################################################
-   integer(kind=our_int) function start_val_saturated( prob, &
+   integer(kind=our_int) function start_val_saturated( mu, &
         work, err ) result(answer)
       ! For model_type = "saturated"
       !   * If start_val_use is .true., begins with supplied values 
-      !     in prob.  Then jitters them, and normalizes to sum to one.
+      !     in mu.  Then jitters them, and computes corresponding probs
       !   * If start_val_use is .false., creates starting
       !     values according to start_val_default. If "center",
       !     starts at the center of the parameter space 
       !     (equal across cells), then jitters them and normalizes.
       !     If "uniform", generates random probs from a uniform
       !     density over the simplex.
-      ! puts the result into work%prob_new
+      ! puts the result into work%mu_new, and the corresponding
+      ! cell probs into work%prob_new
       implicit none
       ! declare inouts
-      real(kind=our_dble), intent(in) :: prob(:)
+      real(kind=our_dble), intent(in) :: mu(:)
       ! declare workspaces
       type(workspace_type_cvam), intent(inout) :: work
       type(error_type), intent(inout) :: err
       ! declare locals
       integer(kind=our_int) :: i
-      real(kind=our_dble) :: rtmp, log_prob
+      real(kind=our_dble) :: rtmp, log_mean
       character(len=*), parameter :: &
            subname = "start_val_saturated"
       ! begin
       answer = RETURN_FAIL
       if( work%model_type /= "saturated" ) goto 10
-      if( size(prob) /= work%ncells ) goto 20
+      if( size(mu) /= work%ncells ) goto 20
       if( work%start_val_jitter < 0.D0 ) goto 90
       !
       if( work%start_val_use ) then
-         work%prob(:) = prob(:)
+         work%mu(:) = mu(:)
+         work%mu_new(:) = work%mu(:)
          ! check for correct pattern of zeros and nonzeros
          do i = 1, work%ncells
-            if( work%str_zero(i) .and. work%prob(i) /= 0.D0 ) goto 100
-            if( .not. work%str_zero(i) .and. work%prob(i) <= 0.D0 ) goto 105
+            if( work%str_zero(i) .and. work%mu(i) /= 0.D0 ) goto 100
+            if( .not. work%str_zero(i) .and. work%mu(i) <= 0.D0 ) goto 105
          end do
+         ! jitter, store in mu_new and normalize to get prob_new
          if( work%start_val_jitter > 0.D0 ) then
             do i = 1, work%ncells
                if( work%str_zero(i) ) cycle
-               log_prob = log( work%prob(i) )
+               log_mean = log( work%mu(i) )
                if( rnorm_R( rtmp, err ) == RETURN_FAIL ) goto 800
-               log_prob = log_prob + rtmp * work%start_val_jitter
-               if( log_prob < log_tiny ) goto 110
-               if( log_prob > log_huge ) goto 120
-               work%prob(i) = exp( log_prob )
+               log_mean = log_mean + rtmp * work%start_val_jitter
+               if( log_mean < log_tiny ) goto 110
+               if( log_mean > log_huge ) goto 120
+               work%mu_new(i) = exp( log_mean )
             end do
          end if
-         if( normalize_prob( work%prob, work%prob_new, work, err ) &
+         if( normalize_prob( work%mu_new, work%prob_new, work, err ) &
               == RETURN_FAIL ) goto 800
       else
          if( work%start_val_default == "center" ) then
-            ! fill prob with equal values
+            ! fill work%mu with equal values, then jitter
             do i = 1, work%ncells
                if( work%str_zero(i) ) then
-                  work%prob(i) = 0.D0
+                  work%mu(i) = 0.D0
                else
-                  work%prob(i) = 1.D0
+                  work%mu(i) = 1.D0
                end if
             end do
+            work%mu_new(:) = work%mu(:)
             if( work%start_val_jitter > 0.D0 ) then
                do i = 1, work%ncells
                   if( work%str_zero(i) ) cycle
-                  log_prob = log( work%prob(i) )
+                  log_mean = log( work%mu(i) )
                   if( rnorm_R( rtmp, err ) == RETURN_FAIL ) goto 800
-                  log_prob = log_prob + rtmp * work%start_val_jitter
-                  if( log_prob < log_tiny ) goto 110
-                  if( log_prob > log_huge ) goto 120
-                  work%prob(i) = exp( log_prob )
+                  log_mean = log_mean + rtmp * work%start_val_jitter
+                  if( log_mean < log_tiny ) goto 110
+                  if( log_mean > log_huge ) goto 120
+                  work%mu_new(i) = exp( log_mean )
                end do
             end if
-            if( normalize_prob( work%prob, work%prob_new, &
+            if( normalize_prob( work%mu_new, work%prob_new, &
                  work, err ) == RETURN_FAIL ) goto 800
          else if( work%start_val_default == "uniform" ) then
             do i = 1, work%ncells
                if( work%str_zero(i) ) cycle
                if( runif_R( rtmp, err ) == RETURN_FAIL ) goto 800
-               work%prob(i) = rtmp
+               work%mu_new(i) = rtmp
             end do
-            if( normalize_prob( work%prob, work%prob_new, &
+            if( normalize_prob( work%mu_new, work%prob_new, &
                  work, err ) == RETURN_FAIL ) goto 800
          else
             goto 50
@@ -2229,7 +3078,7 @@ module cvam_engine
             comment = "Incorrect model type" )
       goto 800
 20    call err_handle(err, 1, &
-            comment = "Argument prob has incorrect size" )
+            comment = "Argument mu has incorrect size" )
       goto 800
 50    call err_handle(err, 1, &
             comment = "Value of start_val_default not recognized" )
@@ -2246,11 +3095,11 @@ module cvam_engine
       call err_handle(err, 15, icell = i )
       goto 800
 110   call err_handle(err, 1, &
-            comment = "Underflow; jittered cell prob became zero" )
+            comment = "Underflow; jittered cell mean became zero" )
       call err_handle(err, 15, icell = i )
       goto 800
 120   call err_handle(err, 1, &
-            comment = "Overflow; jittered cell prob became too large" )
+            comment = "Overflow; jittered cell mean became too large" )
       call err_handle(err, 15, icell = i )
       goto 800
 800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
@@ -2273,7 +3122,7 @@ module cvam_engine
       !     are uniformly distributed over the cells; performs an
       !     e-step, then fits the log-linear model to those frequencies.
       !   * Result is stored in beta_new, with corresponding probs
-      !     in prob_new
+      !     in prob_new and corresponding cell means in mu_new
       implicit none
       ! declare inouts
       real(kind=our_dble), intent(in) :: beta(:)
@@ -2327,6 +3176,7 @@ module cvam_engine
               == RETURN_FAIL ) goto 800
          if( normalize_prob( work%mu, work%prob_new, work, err ) &
               == RETURN_FAIL ) goto 800
+         work%mu_new(:) = work%mu(:)
       else
          if( work%start_val_default == "center" ) then
             if( work%start_val_jitter > 0.D0 ) then
@@ -2342,22 +3192,23 @@ module cvam_engine
                  == RETURN_FAIL ) goto 800
             if( normalize_prob( work%mu, work%prob_new, work, err ) &
                  == RETURN_FAIL ) goto 800
+            work%mu_new(:) = work%mu(:)
          else if( work%start_val_default == "uniform" ) then
             do i = 1, work%ncells
                if( work%str_zero(i) ) cycle
                if( runif_R( rtmp, err ) == RETURN_FAIL ) goto 800
-               work%prob_new(i) = rtmp
+               work%mu(i) = rtmp
             end do
-            if( normalize_prob( work%prob_new, work%prob, &
-                 work, err ) == RETURN_FAIL ) goto 800
             if( run_estep( work, err, &
                  use_flatten = .true., use_prior_data = .true., &
                  use_input_data = .true.) == RETURN_FAIL ) goto 800
+            work%beta(:) = work%beta_null(:)
             if( run_mstep_log_linear( work, err ) == RETURN_FAIL ) goto 800
             if( compute_mu_from_beta( work%beta_new, work, err ) &
                  == RETURN_FAIL ) goto 800
             if( normalize_prob( work%mu, work%prob_new, work, err ) &
                  == RETURN_FAIL ) goto 800
+            work%mu_new(:) = work%mu(:)
          else
             goto 50
          end if
@@ -2636,13 +3487,12 @@ module cvam_engine
     end function advance_cell_random_part
    !##################################################################
     integer(kind=our_int) function run_estep( work, err, &
-         use_flatten, use_prior_data, use_input_data, use_cell_means ) &
+         use_flatten, use_prior_data, use_input_data ) &
          result(answer)
       ! Performs a single E-step
       ! Distributes the frequencies in prior_data_freq and input_data_freq
       ! across the cells of the complete-data table ( work%freq ),
-      ! given the current estimate of the cell probs ( work%prob )
-      ! or cell means (work%mu)
+      ! given the current estimate of the cell means ( work%mu )
       ! Also accumulates the loglikelihood in work%loglik, and
       ! the log-prior in work%logprior
       implicit none
@@ -2653,12 +3503,11 @@ module cvam_engine
       logical, intent(in), optional :: use_flatten
       logical, intent(in), optional :: use_prior_data
       logical, intent(in), optional :: use_input_data
-      logical, intent(in), optional :: use_cell_means
       ! declare locals
       integer(kind=our_int) :: row, i, j
-      real(kind=our_dble) :: ntotal, nprior, ndata, log_ntotal, sum
+      real(kind=our_dble) :: sum
       logical :: use_prior_data_local, use_input_data_local, &
-           use_flatten_local, use_cell_means_local
+           use_flatten_local
       character(len=*), parameter :: &
            subname = "run_estep"
       ! begin
@@ -2679,24 +3528,16 @@ module cvam_engine
       else
          use_input_data_local = .true.
       end if
-      if( present( use_cell_means ) ) then
-         if( use_cell_means .and. (work%model_type /= "log-linear") ) goto 20
-         use_cell_means_local = use_cell_means
-      else
-         use_cell_means_local = .false.
-      end if
       ! initialize counts etc.
       work%freq(:) = 0.D0
       work%logprior = 0.D0
       work%loglik = 0.D0
-      nprior = 0.D0
-      ndata = 0.D0
+      ! poisson correction
+      do i = 1, work%ncells
+         if( work%str_zero(i) ) cycle
+         work%loglik = work%loglik - work%mu(i)
+      end do
       if( work%model_type == "log-linear" ) then
-         ! poisson correction
-         do i = 1, work%ncells
-            if( work%str_zero(i) ) cycle
-            work%loglik = work%loglik - work%mu(i)
-         end do
          ! ridge contribution
          sum = 0.D0
          do j = 1, work%p
@@ -2706,20 +3547,15 @@ module cvam_engine
       end if
       ! apply flattening constants
       if( use_flatten_local ) then
-         if( flatten_table(work, err, use_cell_means_local ) &
-              == RETURN_FAIL ) goto 800
-         nprior = nprior + work%flatten
+         if( flatten_table(work, err ) == RETURN_FAIL ) goto 800
       end if
       ! distribute prior data
       if( use_prior_data_local ) then
          do row = 1, work%nrow_prior_data
             if( run_estep_single_row( row, work%prior_data, &
                  work%prior_data_freq, work%prior_data_use, &
-                 work, err, prior = .true., &
-                 use_cell_means = use_cell_means_local ) &
+                 work, err, prior = .true. ) &
                  == RETURN_FAIL ) goto 800
-            if( work%prior_data_use(row) ) nprior = nprior + &
-                 work%prior_data_freq(row)
          end do
       end if
       ! distribute input data
@@ -2727,81 +3563,48 @@ module cvam_engine
          do row = 1, work%nrow_input_data
             if( run_estep_single_row( row, work%input_data, &
                  work%input_data_freq, work%input_data_use, &
-                 work, err, prior = .false., &
-                 use_cell_means = use_cell_means_local ) &
+                 work, err, prior = .false. ) &
                  == RETURN_FAIL ) goto 800 
-            if( work%input_data_use(row) ) ndata = ndata + &
-                 work%input_data_freq(row)
          end do
       end if
-      ! poisson corrections for saturated model
-      if( work%model_type == "saturated" ) then
-         ntotal = nprior + ndata
-         if( ntotal > 0.D0 ) then
-            log_ntotal = log(ntotal)
-            work%loglik = work%loglik + ndata * log_ntotal - ntotal
-            work%logprior = work%logprior + nprior * log_ntotal
-         else
-            ! nothing to do, because nprior and ndata are zero
-         end if
-      end if
+      !
       work%logP = work%logprior + work%loglik
+      !
       ! normal exit
       answer = RETURN_SUCCESS
       return
       ! error trap
-20    call err_handle(err, 1, &
-            comment = "There is no log-linear model" )
-      goto 800
 800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
     end function run_estep
    !##################################################################
-    integer(kind=our_int) function flatten_table( work, err, &
-         use_cell_means ) result(answer)
+    integer(kind=our_int) function flatten_table( work, err ) &
+         result(answer)
       implicit none
       ! declare workspaces
       type(workspace_type_cvam), intent(inout) :: work
       type(error_type), intent(inout) :: err
-      ! optionals
-      logical, intent(in), optional :: use_cell_means
       ! declare locals
       integer(kind=our_int) :: i
-      real(kind=our_dble) :: flat_const, log_prob
-      logical :: use_cell_means_local
+      real(kind=our_dble) :: flat_const, log_mean
       character(len=*), parameter :: &
            subname = "flatten_table"
       ! begin
       answer = RETURN_FAIL
-      if( present( use_cell_means ) ) then
-         if( use_cell_means .and. (work%model_type /= "log-linear" ) ) goto 20
-         use_cell_means_local = use_cell_means
-      else
-         use_cell_means_local = .false.
-      end if
       flat_const = work%flatten / &
            real( work%ncells_nonzero, our_dble )
       if( flat_const == 0.D0 ) goto 10 ! nothing to do
       do i = 1, work%ncells
          if( work%str_zero(i) ) cycle
          work%freq(i) = work%freq(i) + flat_const
-         if( use_cell_means_local ) then
-            if( work%mu(i) <= 0.D0 ) goto 200
-            log_prob = log( work%mu(i) )
-         else
-            if( work%prob(i) <= 0.D0 ) goto 200
-            log_prob = log( work%prob(i) )
-         end if
-         work%logprior = work%logprior + flat_const * &
-              log_prob
+         if( work%mu(i) <= 0.D0 ) goto 200
+         log_mean = log( work%mu(i) )
+         work%logprior = work%logprior + flat_const * log_mean
       end do
 10    continue
       ! normal exit
       answer = RETURN_SUCCESS
       return
       ! error trap
-20    call err_handle(err, 1, &
-            comment = "There is no log-linear model" )
-      goto 800
 200   call err_handle(err, 1, &
             comment = "Attempted logarithm of non-positive number" )
       goto 800
@@ -2810,15 +3613,14 @@ module cvam_engine
    !##################################################################
     integer(kind=our_int) function run_estep_single_row( row, &
          data_matrix, data_freq, data_use, work, err, &
-         prior, use_cell_means ) result( answer )
+         prior ) result( answer )
       ! performs the e-step for a single row of data_matrix
       ! (data_matrix is either work%input_data or work%prior_data)
       ! (data_freq is either work%input_data_freq or work%prior_data_freq)
       ! (data_use is either work%input_data_use or work%prior_data_use)
       ! Distributes the frequency in data_freq(row) 
       ! across the cells of the complete-data table ( work%counts ),
-      ! given the current estimate of the cell probs ( work%prob ),
-      ! and across the cells of each submodel table
+      ! given the current estimate of the cell means ( work%mu )
       ! If prior = .true., accumulates work%logprior
       ! If prior = .false., accumulates work%loglik (default)
       implicit none
@@ -2832,12 +3634,10 @@ module cvam_engine
       type(error_type), intent(inout) :: err
       ! optionals
       logical, intent(in), optional :: prior
-      logical, intent(in), optional :: use_cell_means
       ! declare locals
       integer(kind=our_int) :: i
       real(kind=our_dble) :: sum, freq_part
-      logical :: prior_local, use_cell_means_local, &
-           non_zero_cells_present
+      logical :: prior_local, non_zero_cells_present
       character(len=*), parameter :: &
            subname = "run_estep_single_row"
       ! begin
@@ -2847,16 +3647,9 @@ module cvam_engine
       else
          prior_local = .false.
       end if
-      if( present( use_cell_means ) ) then
-         if( use_cell_means .and. (work%model_type /= "log-linear" ) ) goto 20
-         use_cell_means_local = use_cell_means
-      else
-         use_cell_means_local = .false.
-      end if
       if( ( row < 0 ) .or. ( row > size(data_matrix, 1) ) ) goto 100
       if( .not. data_use(row) ) goto 10 ! nothing to do
-      !
-      ! accumulate total probability for all cells of the 
+      ! accumulate total cell mean for all cells of the 
       ! complete-data table that contribute to the given row
       ! of coarsened data
       work%begin_cycle = .true.
@@ -2868,11 +3661,7 @@ module cvam_engine
               == RETURN_FAIL ) goto 800
          i = work%cell
          if( .not. work%str_zero(i) ) then
-            if( use_cell_means_local ) then
-               sum = sum + work%mu( i )
-            else
-               sum = sum + work%prob( i )
-            end if
+            sum = sum + work%mu( i )
             non_zero_cells_present = .true.
          end if
          if( work%cycle_done ) exit
@@ -2899,11 +3688,7 @@ module cvam_engine
               == RETURN_FAIL ) goto 800
          i = work%cell
          if( .not. work%str_zero(i) ) then
-            if( use_cell_means_local ) then
-               freq_part = data_freq( row ) * work%mu( i ) / sum
-            else
-               freq_part = data_freq( row ) * work%prob( i ) / sum
-            end if
+            freq_part = data_freq( row ) * work%mu( i ) / sum
             work%freq( i ) = work%freq( i ) + freq_part
          end if
          if( work%cycle_done ) exit
@@ -2913,9 +3698,6 @@ module cvam_engine
       answer = RETURN_SUCCESS
       return
       ! error trap
-20    call err_handle(err, 1, &
-            comment = "There is no log-linear model" )
-      goto 800
 100   call err_handle(err, 1, &
             comment = "Argument row out of bounds" )
       goto 800
@@ -3385,7 +4167,7 @@ module cvam_engine
          end if
          if( run_estep( work, err, &
               use_flatten = .true., use_prior_data = .true., &
-              use_input_data = .true., use_cell_means = .true. ) &
+              use_input_data = .true. ) &
               == RETURN_FAIL ) then
             aborted = .true.
             goto 600
@@ -3415,10 +4197,12 @@ module cvam_engine
          call err_handle(err, 5, iiter = work%iter )
          work%beta_new(:) = work%beta(:)
          work%prob_new(:) = work%prob(:)
+         work%mu_new(:) = work%mu_old(:)
       else
          ! put latest estimates implied by work%beta_new into work%prob_new
          if( compute_mu_from_beta( work%beta_new, work, err ) &
               == RETURN_FAIL ) goto 800
+         work%mu_new(:) = work%mu(:)
          if( normalize_prob( work%mu, work%prob_new, work, err ) &
               == RETURN_FAIL ) goto 800
          work%prob(:) = work%prob_new(:)
@@ -3430,7 +4214,7 @@ module cvam_engine
       work%input_data_use(:) = .true.
       if( run_estep( work, err, &
            use_flatten = .false., use_prior_data = .false., &
-           use_input_data = .true., use_cell_means = .true. ) &
+           use_input_data = .true. ) &
            == RETURN_FAIL ) goto 800
       ! normal exit
       answer = RETURN_SUCCESS
@@ -3463,7 +4247,10 @@ module cvam_engine
          if( work%converged ) exit
          if( work%iter >= work%iter_max_EM ) exit
          work%iter = work%iter + 1
-         if( work%iter > 1 ) work%prob(:) = work%prob_new(:)
+         if( work%iter > 1 ) then
+            work%prob(:) = work%prob_new(:)
+            work%mu(:) = work%mu_new(:)
+         end if
          if( run_estep( work, err, &
               use_flatten = .true., use_prior_data = .true., &
               use_input_data = .true.) == RETURN_FAIL ) then
@@ -3473,6 +4260,7 @@ module cvam_engine
          work%loglik_vec( work%iter ) = work%loglik
          work%logP_vec( work%iter ) = work%logP
          if( work%iter == 1 ) work%start_logP = work%logP
+         work%mu_new(:) = work%freq(:)
          if( normalize_prob( work%freq, work%prob_new, &
               work, err ) == RETURN_FAIL ) then
             aborted = .true.
@@ -3483,7 +4271,7 @@ module cvam_engine
          do i = 1, work%ncells
             if( work%str_zero(i) ) cycle
             work%max_diff = max( work%max_diff, &
-                 abs( work%prob_new(i) - work%prob(i) ) )
+                 abs( work%mu_new(i) - work%mu(i) ) )
          end do
          if( work%max_diff <= work%crit_EM ) work%converged = .true.
       end do
@@ -3494,8 +4282,10 @@ module cvam_engine
               comment = "EM algorithm aborted" )
          call err_handle(err, 5, iiter = work%iter )
          work%prob_new(:) = work%prob(:)
+         work%mu_new(:) = work%mu(:)
       else
          work%prob(:) = work%prob_new(:)
+         work%mu(:) = work%mu_new(:)
       end if
       ! compute freq
       work%input_data_use(:) = .true.
@@ -3751,7 +4541,7 @@ module cvam_engine
       logical, intent(in), optional :: prior
       ! declare locals
       integer(kind=our_int) :: i, ii, j
-      real(kind=our_dble) :: tau, freq_part, sum
+      real(kind=our_dble) :: tau, freq_part, sum, num, den
       logical :: prior_local, non_zero_cells_present
       character(len=*), parameter :: &
            subname = "run_estep_single_row_with_derivs"
@@ -3823,8 +4613,14 @@ module cvam_engine
                     == RETURN_FAIL ) goto 800
                ii = work%cell_2
                if( .not. work%str_zero(ii) ) then
-                  work%Mrow(ii) = - work%bigFhat(i) * work%bigFhat(ii) &
-                       / data_freq(row)
+                  num = - work%bigFhat(i) * work%bigFhat(ii)
+                  den = data_freq(row)
+                  if( (num > 0.D0 ) .and. ( den == 0.D0 ) ) goto 200
+                  if( ( num == 0.D0 ) .and. ( den == 0.D0 ) ) then
+                     work%Mrow(ii) = 0.D0
+                  else
+                     work%Mrow(ii) = num / den
+                  end if
                end if
                if( work%cycle_done_2 ) exit
             end do
@@ -5092,6 +5888,7 @@ module cvam_engine
            == RETURN_FAIL ) goto 800
       if( fill_input_data_with_missing( synthetic_int, work, err ) &
            == RETURN_FAIL ) goto 800
+      work%mu(:) = work%prob(:)  ! needed if model is saturated
       if( run_istep( work, err, use_flatten=.false., use_prior_data=.false., &
            use_input_data=.true. ) == RETURN_FAIL ) goto 800
       if( size( result_freq_int ) /= work%ncells ) goto 100
@@ -5158,15 +5955,15 @@ module cvam_engine
     end function fill_impute_result_mat
     !##################################################################
     integer(kind=our_int) function run_istep( work, err, &
-         use_flatten, use_prior_data, use_input_data, use_cell_means ) &
+         use_flatten, use_prior_data, use_input_data ) &
          result(answer)
       ! Performs a single I-step
       ! Distributes the frequencies in prior_data_freq and input_data_freq
       ! across the cells of the complete-data table ( work%freq_int ),
-      ! given the current estimate of the cell probs ( work%prob )
+      ! given the current estimate of the cell means ( work%mu )
       ! Final result is put into work%freq, which also includes flattening
       ! constant
-      ! When finished, work%loglik contains the loglikelohood under
+      ! When finished, work%loglik contains the loglikelihood under
       ! the poisson model
       implicit none
       ! declare workspaces
@@ -5176,12 +5973,11 @@ module cvam_engine
       logical, intent(in), optional :: use_flatten
       logical, intent(in), optional :: use_prior_data
       logical, intent(in), optional :: use_input_data
-      logical, intent(in), optional :: use_cell_means
       ! declare locals
       integer(kind=our_int) :: row, i, j
-      real(kind=our_dble) :: ntotal, nprior, ndata, log_ntotal, sum
+      real(kind=our_dble) :: sum
       logical :: use_flatten_local, use_prior_data_local, &
-           use_input_data_local, use_cell_means_local
+           use_input_data_local
       character(len=*), parameter :: &
            subname = "run_istep"
       ! begin
@@ -5202,49 +5998,35 @@ module cvam_engine
       else
          use_input_data_local = .true.
       end if
-      if( present( use_cell_means ) ) then
-         if( use_cell_means .and. ( work%model_type /= "log-linear" ) ) goto 20
-         use_cell_means_local = use_cell_means
-      else
-         use_cell_means_local = .false.
-      end if
       ! initialize counts etc.
       work%freq(:) = 0.D0
       work%freq_int(:) = 0
       work%logprior = 0.D0
       work%loglik = 0.D0
-      nprior = 0.D0
-      ndata = 0.D0
+      ! poisson correction
+      do i = 1, work%ncells
+         if( work%str_zero(i) ) cycle
+         work%loglik = work%loglik - work%mu(i)
+      end do
       if( work%model_type == "log-linear" ) then
-         ! poisson correction
-         do i = 1, work%ncells
-            if( work%str_zero(i) ) cycle
-            work%loglik = work%loglik - work%mu(i)
          ! ridge contribution
          sum = 0.D0
          do j = 1, work%p
             sum = sum + work%beta(j)**2
          end do
          work%logprior = work%logprior - work%ridge * sum / 2.D0
-         end do
       end if
       ! call flatten_table to accumulate logprior
       if( use_flatten_local ) then
-         if( flatten_table( work, err, &
-              use_cell_means = use_cell_means_local ) &
-              == RETURN_FAIL ) goto 800
-         nprior = nprior + work%flatten
+         if( flatten_table( work, err ) == RETURN_FAIL ) goto 800
       end if
       ! distribute prior data into freq_int
       if( use_prior_data_local ) then
          do row = 1, work%nrow_prior_data
             if( run_istep_single_row( row, work%prior_data, &
                  work%prior_data_freq_int, work%prior_data_use, &
-                 work, err, prior = .true., &
-                 use_cell_means = use_cell_means_local ) &
+                 work, err, prior = .true. ) &
                  == RETURN_FAIL ) goto 800
-            if( work%prior_data_use(row) ) nprior = nprior + &
-                 work%prior_data_freq(row)
          end do
       end if
       ! distribute input data into freq_int
@@ -5252,23 +6034,9 @@ module cvam_engine
          do row = 1, work%nrow_input_data
             if( run_istep_single_row( row, work%input_data, &
                  work%input_data_freq_int, work%input_data_use, &
-                 work, err, prior = .false., &
-                 use_cell_means = use_cell_means_local ) &
+                 work, err, prior = .false. ) &
                  == RETURN_FAIL ) goto 800
-            if( work%input_data_use(row) ) ndata = ndata + &
-                 work%input_data_freq(row)
          end do
-      end if
-      ! poisson corrections for saturated model
-      if( work%model_type == "saturated" ) then
-         ntotal = nprior + ndata
-         if( ntotal > 0.D0 ) then
-            log_ntotal = log(ntotal)
-            work%loglik = work%loglik + ndata * log_ntotal - ntotal
-            work%logprior = work%logprior + nprior * log_ntotal
-         else
-            ! nothing to do, because nprior and ndata are zero
-         end if
       end if
       work%logP = work%logprior + work%loglik
       do i = 1, work%ncells
@@ -5279,24 +6047,20 @@ module cvam_engine
       answer = RETURN_SUCCESS
       return
       ! error trap
-20    call err_handle(err, 1, &
-            comment = "There is no log-linear model" )
-      goto 800
 800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
     end function run_istep
     !##################################################################
     integer(kind=our_int) function run_istep_single_row( row, &
          data_matrix, data_freq_int, data_use, work, err, &
-         prior, use_cell_means ) result( answer )
+         prior ) result( answer )
       ! performs the i-step for a single row of data_matrix
       ! (data_matrix is either work%input_data or work%prior_data)
       ! (data_freq_int is either work%input_data_freq_int
       ! or work%prior_data_freq_int)
       ! (data_use is either work%input_data_use or work%prior_data_use)
       ! Distributes the frequency in data_freq(row) 
-      ! across the cells of the complete-data table ( work%counts ),
-      ! given the current estimate of the cell probs ( work%prob ),
-      ! and across the cells of each submodel table
+      ! across the cells of the complete-data table ( work%freq_int ),
+      ! given the current estimate of the cell means ( work%mu ),
       ! If prior = .true., accumulates work%logprior
       ! If prior = .false., accumulates work%loglik (default)
       implicit none
@@ -5310,14 +6074,13 @@ module cvam_engine
       type(error_type), intent(inout) :: err
       ! optionals
       logical, intent(in), optional :: prior
-      logical, intent(in), optional :: use_cell_means
       ! declare locals
-      integer(kind=our_int) :: i, n_non_zero_cells, n_cells, f_remaining, &
+      integer(kind=our_int) :: i, n_non_zero_cells, f_remaining, &
            n_non_zero_cells_remaining, rb
       real(kind=our_dble) :: sum, ntmp, ptmp, rtmp
-      logical :: prior_local, use_cell_means_local
+      logical :: prior_local
       character(len=*), parameter :: &
-           subname = "run_estep_single_row"
+           subname = "run_istep_single_row"
       ! begin
       answer = RETURN_FAIL
       if( present( prior ) ) then
@@ -5325,35 +6088,23 @@ module cvam_engine
       else
          prior_local = .false.
       end if
-      if( present( use_cell_means ) ) then
-         if( use_cell_means .and. ( work%model_type /= "log-linear" ) ) goto 20
-         use_cell_means_local = use_cell_means
-      else
-         use_cell_means_local = .false.
-      end if
       if( ( row < 0 ) .or. ( row > size(data_matrix, 1) ) ) goto 100
       if( .not. data_use(row) ) goto 10 ! nothing to do
       if( data_freq_int(row) == 0 ) goto 10 ! nothing to do
-      ! accumulate total probability for all cells of the 
+      ! accumulate total mu for all cells of the 
       ! complete-data table that contribute to the given row
       ! of coarsened data
       work%begin_cycle = .true.
       work%cycle_done = .false.
       n_non_zero_cells = 0
-      n_cells = 0
       sum = 0.D0
       do
          if( advance_to_next_cell( row, data_matrix, work, err ) &
               == RETURN_FAIL ) goto 800
          i = work%cell
-         n_cells = n_cells + 1
          if( .not. work%str_zero(i) ) then
             n_non_zero_cells = n_non_zero_cells + 1
-            if( use_cell_means_local ) then
-               sum = sum + work%mu( i )
-            else
-               sum = sum + work%prob( i )
-            end if
+            sum = sum + work%mu( i )
          end if
          if( work%cycle_done ) exit
       end do
@@ -5370,9 +6121,9 @@ module cvam_engine
               work%loglik = work%loglik + &
               real(data_freq_int(row), our_dble) * log(sum)
       end if
-      ! distribute the frequency proportionately across the cells
-      ! of the complete-data table, and also the cells of the
-      ! table for each sub-model
+      ! distribute the frequency randomly across the cells
+      ! of the complete-data table using a multinomial draw, implemented
+      ! by repeated drawing from binomials
       work%begin_cycle = .true.
       work%cycle_done = .false.
       f_remaining = data_freq_int(row)
@@ -5397,21 +6148,13 @@ module cvam_engine
             end if
          end if
          if( .not. work%str_zero(i) ) then
-            if( use_cell_means_local ) then
-               ptmp = work%mu(i) / sum
-            else
-               ptmp = work%prob(i) / sum
-            end if
+            ptmp = work%mu(i) / sum
             ntmp = real( f_remaining, our_dble )
             if( rbinom_R( ntmp, ptmp, rtmp, err ) == RETURN_FAIL ) goto 800
             rb = int(rtmp, our_int)
             work%freq_int(i) = work%freq_int(i) + rb
             f_remaining = f_remaining - rb
-            if( use_cell_means_local ) then
-               sum = sum - work%mu(i)
-            else
-               sum = sum - work%prob(i)
-            end if
+            sum = sum - work%mu(i)
             if( f_remaining == 0 ) exit
          end if
       end do
@@ -5420,9 +6163,6 @@ module cvam_engine
       answer = RETURN_SUCCESS
       return
       ! error trap
-20    call err_handle(err, 1, &
-            comment = "There is no log-linear model" )
-      goto 800
 100   call err_handle(err, 1, &
             comment = "Argument row out of bounds" )
       goto 800
@@ -5433,7 +6173,7 @@ module cvam_engine
             comment = "Bad row in input data, positive freq for zero cells" )
       goto 800
 210   call err_handle(err, 1, &
-            comment = "Negative probability encountered" )
+            comment = "Negative cell mean encountered" )
       goto 800
 300   call err_handle(err, 1, &
             comment = "Negative value for f_remaining" )
@@ -5557,7 +6297,7 @@ module cvam_engine
       ! Performs a single I-step
       ! Distributes the frequencies in prior_data_freq and input_data_freq
       ! across the cells of the complete-data table ( work%freq_int ),
-      ! given the current estimate of the cell probs ( work%prob )
+      ! given the current estimate of the cell means ( work%mu )
       implicit none
       ! output
       integer(kind=our_int), intent(out) :: output_data(:,:)
@@ -5590,7 +6330,7 @@ module cvam_engine
             n_cells = n_cells + 1
             if( .not. work%str_zero(i) ) then
                n_non_zero_cells = n_non_zero_cells + 1
-               sum = sum + work%prob( i )
+               sum = sum + work%mu( i )
             end if
             if( work%cycle_done ) exit
          end do
@@ -5619,13 +6359,13 @@ module cvam_engine
                end if
             end if
             if( .not. work%str_zero(i) ) then
-               ptmp = work%prob(i) / sum
+               ptmp = work%mu(i) / sum
                if( runif_R( rtmp, err ) == RETURN_FAIL ) goto 800
                if( rtmp <= ptmp ) then
                   output_data(row,:) = work%var(:)
                   exit
                end if
-               sum = sum - work%prob(i)
+               sum = sum - work%mu(i)
             end if
          end do
       end do
@@ -5646,7 +6386,7 @@ module cvam_engine
       call err_handle(err, 3, iobs=row)
       goto 800
 210   call err_handle(err, 1, &
-            comment = "Negative probability encountered" )
+            comment = "Negative cell mean encountered" )
       goto 800
 310   call err_handle(err, 1, &
             comment = "Something bad happened" )
@@ -6204,7 +6944,7 @@ module cvam_engine
          end if
          if( run_istep( work, err, use_flatten = .true., &
               use_prior_data = .true., &
-              use_input_data = .true., use_cell_means = .true.) &
+              use_input_data = .true. ) &
               == RETURN_FAIL ) goto 10
          if( work%iter == 1 ) work%start_logP = work%logP
          work%loglik_vec( work%iter ) = work%loglik
@@ -6718,7 +7458,8 @@ module cvam_engine
       answer = RETURN_FAIL
       if( work%model_type /= "saturated" ) goto 20 
       if( work%method /= "MCMC" ) goto 30 
-      ! initialize iteration counters      work%iter = 0
+      ! initialize iteration counters
+      work%iter = 0
       work%iter_past_burn_in = 0
       work%store_count = 0
       work%imp_count = 0
@@ -6733,6 +7474,8 @@ module cvam_engine
       if( size(prob_series) > 0 ) prob_series(:,:) = 0.D0
       if( size(logp_series) > 0 ) logp_series(:) = 0.D0
       if( size( imputed_freq_int) > 0 ) imputed_freq_int(:,:) = 0
+      if( size( packed_estimates_series ) > 0 ) &
+           packed_estimates_series(:,:) = 0.D0
       if( work%n_estimates > 0 ) work%packed_estimates_mean = 0.D0
       aborted = .false.
       ! main iteration
@@ -6760,7 +7503,7 @@ module cvam_engine
          !#######################
          if( run_istep( work, err, use_flatten = .true., &
               use_prior_data = .true., &
-              use_input_data = .true., use_cell_means = .false.) &
+              use_input_data = .true. ) &
               == RETURN_FAIL ) goto 10
          if( work%iter == 1 ) work%start_logP = work%logP
          work%loglik_vec( work%iter ) = work%loglik
@@ -6779,9 +7522,9 @@ module cvam_engine
             end if
             if( rgamma_R( work%freq(i) + 1.D0, 1.D0, rtmp, err ) &
                  == RETURN_FAIL ) goto 800
-            work%prob_new(i) = rtmp
+            work%mu(i) = rtmp
          end do
-         if( normalize_prob( work%prob_new, work%prob, work, err ) &
+         if( normalize_prob( work%mu, work%prob, work, err ) &
               == RETURN_FAIL ) goto 10
          if( compute_estimates( work%prob, work, err ) &
               == RETURN_FAIL ) goto 10
@@ -6986,7 +7729,7 @@ module cvam_engine
          end if
          if( work%iter == 1 ) then
             if( compute_loglik_logprior( work%beta, work, err, &
-                 use_cell_means = .true., logprior = logprior_tmp, &
+                 logprior = logprior_tmp, &
                  loglik = loglik_tmp ) == RETURN_FAIL ) goto 10
             work%loglik = loglik_tmp
             work%logprior = logprior_tmp
@@ -7141,42 +7884,33 @@ module cvam_engine
     end function compute_scale_rwm
     !##################################################################
     integer(kind=our_int) function compute_loglik_logprior( beta, &
-         work, err, &
-         use_cell_means, logprior, loglik ) &
-         result(answer)
-      ! Given the current estimate of the cell probs ( work%prob )
-      ! or cell means (work%mu),
+         work, err, logprior, loglik ) result(answer)
+      ! Given the current estimate of the cell means (work%mu),
       ! accumulates the loglik and logprior
       implicit none
       real(kind=our_dble), intent(in) :: beta(:)
       ! declare workspaces
       type(workspace_type_cvam), intent(inout) :: work
       type(error_type), intent(inout) :: err
-      ! declare inputs
-      logical, intent(in) :: use_cell_means
       ! declare outputs
       real(kind=our_dble), intent(out) :: loglik, logprior
       ! declare locals
       integer(kind=our_int) :: row, i, j
-      real(kind=our_dble) :: flat_const, log_prob, sum
-      real(kind=our_dble) :: ntotal, nprior, ndata, log_ntotal
+      real(kind=our_dble) :: flat_const, log_mean, sum
       logical :: non_zero_cells_present
       character(len=*), parameter :: &
            subname = "compute_loglik_logprior"
       ! begin
       answer = RETURN_FAIL
-      if( use_cell_means .and. (work%model_type /= "log-linear") ) goto 20
       ! initialize counts etc.
       logprior = 0.D0
       loglik = 0.D0
-      nprior = 0.D0
-      ndata = 0.D0
+      ! poisson correction
+      do i = 1, work%ncells
+         if( work%str_zero(i) ) cycle
+         loglik = loglik - work%mu(i)
+      end do
       if( work%model_type == "log-linear" ) then
-         ! poisson correction
-         do i = 1, work%ncells
-            if( work%str_zero(i) ) cycle
-            loglik = loglik - work%mu(i)
-         end do
          ! ridge contribution
          sum = 0.D0
          do j = 1, work%p
@@ -7190,18 +7924,11 @@ module cvam_engine
       if( flat_const > 0.D0 ) then 
          do i = 1, work%ncells
             if( work%str_zero(i) ) cycle
-            if( use_cell_means ) then
-               if( work%mu(i) <= 0.D0 ) goto 200
-               log_prob = log( work%mu(i) )
-            else
-               if( work%prob(i) <= 0.D0 ) goto 200
-               log_prob = log( work%prob(i) )
-            end if
-            logprior = logprior + flat_const * &
-                 log_prob
+            if( work%mu(i) <= 0.D0 ) goto 200
+            log_mean = log( work%mu(i) )
+            logprior = logprior + flat_const * log_mean
          end do
       end if
-      nprior = nprior + work%flatten
       ! accumulate rest of logprior
       do row = 1, work%nrow_prior_data
          if( .not. work%prior_data_use(row) ) cycle
@@ -7214,11 +7941,7 @@ module cvam_engine
                  == RETURN_FAIL ) goto 800
             i = work%cell
             if( .not. work%str_zero(i) ) then
-               if( use_cell_means ) then
-                  sum = sum + work%mu( i )
-               else
-                  sum = sum + work%prob( i )
-               end if
+               sum = sum + work%mu(i)
                non_zero_cells_present = .true.
             end if
             if( work%cycle_done ) exit
@@ -7229,7 +7952,6 @@ module cvam_engine
          if( sum < 0.D0 ) goto 210
          if( non_zero_cells_present ) &
               logprior = logprior + work%prior_data_freq(row) * log(sum)
-         nprior = nprior + work%prior_data_freq(row)
       end do
       ! accumulate rest of loglik
       do row = 1, work%nrow_input_data
@@ -7243,11 +7965,7 @@ module cvam_engine
                  == RETURN_FAIL ) goto 800
             i = work%cell
             if( .not. work%str_zero(i) ) then
-               if( use_cell_means ) then
-                  sum = sum + work%mu( i )
-               else
-                  sum = sum + work%prob( i )
-               end if
+               sum = sum + work%mu(i)
                non_zero_cells_present = .true.
             end if
             if( work%cycle_done ) exit
@@ -7258,26 +7976,11 @@ module cvam_engine
          if( sum < 0.D0 ) goto 210
          if( non_zero_cells_present ) &
               loglik = loglik + work%input_data_freq(row) * log(sum)
-         ndata = ndata + work%input_data_freq(row)
       end do
-      ! poisson corrections for saturated model
-      if( work%model_type == "saturated" ) then
-         ntotal = nprior + ndata
-         if( ntotal > 0.D0 ) then
-            log_ntotal = log(ntotal)
-            work%loglik = work%loglik + ndata * log_ntotal - ntotal
-            work%logprior = work%logprior + nprior * log_ntotal
-         else
-            ! nothing to do, because nprior and ndata are zero
-         end if
-      end if
       ! normal exit
       answer = RETURN_SUCCESS
       return
       ! error trap
-20    call err_handle(err, 1, &
-            comment = "There is no log-linear model" )
-      goto 800
 200   call err_handle(err, 1, &
             comment = "Attempted logarithm of non-positive number" )
       goto 800
@@ -7377,7 +8080,7 @@ module cvam_engine
       if( compute_mu_from_beta( work%beta_can, work, err ) &
            == RETURN_FAIL ) goto 800
       if( compute_loglik_logprior( work%beta_can, work, err, &
-           use_cell_means = .true., logprior = logprior_tmp, &
+           logprior = logprior_tmp, &
            loglik = loglik_tmp ) == RETURN_FAIL ) goto 800
       log_mh_ratio = log_mh_ratio + logprior_tmp + loglik_tmp
       ! to prevent over/underflow
@@ -7489,7 +8192,7 @@ module cvam_engine
             ! mu, logmu and prob are already consistent with beta
          end if
          if( compute_loglik_logprior( work%beta, work, err, &
-              use_cell_means = .true., logprior = logprior_tmp, &
+              logprior = logprior_tmp, &
               loglik = loglik_tmp ) == RETURN_FAIL ) goto 10
          work%loglik = loglik_tmp
          work%logprior = logprior_tmp
@@ -8457,6 +9160,2300 @@ module cvam_engine
       ! cleanup
 999   continue
     end function compute_score_hess_lcprev
+    !##################################################################
+    integer(kind=our_int) function run_cvam_logit( &
+         method_int, x, ystar, freq_int, &
+         n_levels_matrix, packed_map, baseline, &
+         row_posn_data_patt, freq_int_data_patt, row_posn_cov_patt, &
+         cov_patt_for_data_patt, &
+         prior_int, crit_em_null, flatten_em_null, prior_freq_tot_DAP, &
+         crit_em, crit_nr, &
+         iter_max_em_null, iter_max_em, start_val_use_int, iter_max_nr, &
+         beta, &
+         work, err, &
+         proportions_DAP, &
+         iter, converged, max_diff, loglik, logP, vhat_beta &
+         ) result(answer)
+      implicit none
+      ! declare inputs
+      integer(kind=our_int), intent(in) :: method_int
+      real(kind=our_dble), intent(in) :: x(:,:)
+      integer(kind=our_int), intent(in) :: ystar(:,:)
+      integer(kind=our_int), intent(in) :: freq_int(:)
+      integer(kind=our_int), intent(in) :: n_levels_matrix(:,:)
+      integer(kind=our_int), intent(in) :: packed_map(:)
+      integer(kind=our_int), intent(in) :: baseline
+      integer(kind=our_int), intent(in) :: row_posn_data_patt(:)
+      integer(kind=our_int), intent(in) :: freq_int_data_patt(:)
+      integer(kind=our_int), intent(in) :: row_posn_cov_patt(:)
+      integer(kind=our_int), intent(in) :: cov_patt_for_data_patt(:)
+      integer(kind=our_int), intent(in) :: prior_int
+      real(kind=our_dble), intent(in) :: crit_em_null
+      real(kind=our_dble), intent(in) :: flatten_em_null
+      real(kind=our_dble), intent(in) :: prior_freq_tot_DAP
+      real(kind=our_dble), intent(in) :: crit_em
+      real(kind=our_dble), intent(in) :: crit_nr
+      integer(kind=our_int), intent(in) :: iter_max_em_null
+      integer(kind=our_int), intent(in) :: iter_max_em
+      integer(kind=our_int), intent(in) :: start_val_use_int
+      integer(kind=our_int), intent(in) :: iter_max_nr
+      ! inouts
+      real(kind=our_dble), intent(inout) :: beta(:,:)
+      ! workspaces
+      type(workspace_type_cvam_basic), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! outputs
+      real(kind=our_dble), intent(out) :: proportions_DAP(:)
+      integer(kind=our_int), intent(out) :: iter
+      logical, intent(out) :: converged
+      real(kind=our_dble), intent(out) :: max_diff
+      real(kind=our_dble), intent(out) :: loglik(:)
+      real(kind=our_dble), intent(out) :: logP(:)
+      real(kind=our_dble), intent(out) :: vhat_beta(:,:)
+      ! locals
+      integer(kind=our_int) :: ijunk
+      character(len=*), parameter :: subname = "run_cvam_logit"
+      ! begin
+      answer = RETURN_FAIL
+      work%model_type = "logit"
+      if( put_data_into_basic_workspace( x, ystar, freq_int, &
+           n_levels_matrix, packed_map, work, err ) &
+           == RETURN_FAIL ) goto 800
+      if( setup_logit_workspace( method_int, baseline, &
+           row_posn_data_patt, freq_int_data_patt, row_posn_cov_patt, &
+           cov_patt_for_data_patt, &
+           prior_int, crit_em_null, flatten_em_null, prior_freq_tot_DAP, &
+           crit_em, crit_nr, &
+           iter_max_em_null, iter_max_em, start_val_use_int, iter_max_nr, &
+           beta, &
+           work, err ) == RETURN_FAIL ) goto 800
+      if( work%logit%prior == "DAP" ) then
+         if( run_logit_em_null( work, work%logit, err ) &
+              == RETURN_FAIL ) goto 800
+         if( .not. work%logit%converged_em_null ) then
+            call err_handle(err, 1, &
+                 comment = "EM algorithm for null model failed to converge by" )
+            call err_handle(err, 5, iiter = work%logit%iter_em_null )
+            call err_handle(err, 1, &
+                comment = "Marginal proportions for DAP could not be computed" )
+            goto 800
+         end if
+         work%logit%prior_freq_cov_patt(:) = work%logit%pinull_new(:) * &
+              work%logit%prior_freq_tot_DAP / &
+              real( work%logit%n_cov_patt, kind=our_dble )
+         if( size(proportions_DAP) /= work%logit%r ) goto 200
+         proportions_DAP(:) = work%logit%pinull_new(:)
+      end if
+      if( work%logit%method == "EM" ) then
+         if( run_logit_em( work, work%logit, err ) == RETURN_FAIL ) goto 800
+         iter = work%logit%iter_em
+         converged = work%logit%converged_em
+         max_diff = work%logit%max_diff_em
+         work%logit%beta(:) = work%logit%beta_new(:)
+         if( get_beta_logit( work%logit, beta, err ) == RETURN_FAIL ) goto 800
+         if( size(loglik) < work%logit%iter_em ) goto 210
+         loglik(:) = 0.D0
+         loglik( 1:work%logit%iter_em ) = &
+              work%logit%loglik_vec( 1:work%logit%iter_em )
+         if( size(logP) < work%logit%iter_em ) goto 220
+         logP(:) = 0.D0
+         logP( 1:work%logit%iter_em ) = &
+              work%logit%logP_vec( 1:work%logit%iter_em )
+         if( size(vhat_beta, 1) /= work%logit%d ) goto 230
+         if( size(vhat_beta, 2) /= work%logit%d ) goto 230
+         vhat_beta(:,:) = work%logit%vhat_beta(:,:)
+      else if( work%logit%method == "MCMC" ) then
+         !
+      else
+         goto 100
+      end if
+
+
+      ! normal exit
+      answer = RETURN_SUCCESS
+      goto 999
+      ! error traps
+100   call err_handle(err, 1, &
+            comment = "Method not recognized" )
+      goto 800
+200   call err_handle(err, 1, &
+            comment = "Array proportions_DAP has incorrect size" )
+      goto 800
+210   call err_handle(err, 1, &
+            comment = "Array loglik has insufficient size" )
+      goto 800
+220   call err_handle(err, 1, &
+            comment = "Array logP has insufficient size" )
+      goto 800
+230   call err_handle(err, 1, &
+            comment = "Array vhat_beta has incorrect size" )
+      goto 800
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+      goto 999
+      ! cleanup
+999   continue
+      ijunk = nullify_workspace_type_cvam_basic( work, err )
+    end function run_cvam_logit
+    !##################################################################
+    integer(kind=our_int) function put_data_into_basic_workspace( &
+         pred, ystar, freq_int, n_levels_matrix, packed_map, &
+         work, err ) &
+         result(answer)
+       ! run basic checks on input data and store in workspace, then
+       ! create workspace objects
+       implicit none
+       ! declare inputs
+       real(kind=our_dble), intent(in) :: pred(:,:)
+       integer(kind=our_int), intent(in) :: ystar(:,:)
+       integer(kind=our_int), intent(in) :: freq_int(:)
+       integer(kind=our_int), intent(in) :: n_levels_matrix(:,:)
+       integer(kind=our_int), intent(in) :: packed_map(:)
+       ! declare workspaces
+       type(workspace_type_cvam_basic), intent(inout) :: work
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: status, posn, i, j, k, kmax, isum
+       character(len=*), parameter :: &
+            subname = "put_data_into_basic_workspace"
+       ! begin
+       answer = RETURN_FAIL
+       ! transfer dimensions and check; allocate and copy basic input
+       ! data
+       work%nrow_data = size(ystar, 1)
+       work%ncol_y = size(ystar, 2)
+       allocate( work%ystar( work%nrow_data, work%ncol_y ), stat=status )
+       if( status /= 0 ) goto 100
+       work%ystar(:,:) = ystar(:,:)
+       ! 
+       if( size(pred, 1) /= work%nrow_data ) goto 140
+       work%ncol_pred = size(pred, 2)
+       allocate( work%pred( work%nrow_data, work%ncol_pred ), stat=status )
+       if( status /= 0 ) goto 100
+       work%pred(:,:) = pred(:,:)
+       !
+       if( size(freq_int) /= work%nrow_data ) goto 150
+       allocate( work%data_freq_int( work%nrow_data ), &
+            work%data_freq( work%nrow_data ), &
+            stat=status )
+       if( status /= 0 ) goto 100
+       isum = 0
+       do i = 1, work%nrow_data
+          if( freq_int(i) < 0 ) goto 155
+          isum = isum + freq_int(i)
+          work%data_freq_int(i) = freq_int(i)
+          work%data_freq(i) = real( work%data_freq_int(i), &
+               kind=our_dble)
+       end do
+       if( isum == 0 ) goto 156
+       work%data_freq_tot = isum
+       !
+       if( size(n_levels_matrix,1) /= work%ncol_y ) goto 160
+       if( size(n_levels_matrix,2) /= 3 ) goto 160
+       allocate( work%n_base_levels( work%ncol_y ), &
+            work%n_coarse_levels( work%ncol_y ), &
+            work%n_levels( work%ncol_y ), &
+            stat=status )
+       if( status /= 0 ) goto 100
+       work%n_base_levels(:) = n_levels_matrix(:,1)
+       work%n_coarse_levels(:) = n_levels_matrix(:,2)
+       work%n_levels(:) = n_levels_matrix(:,3)
+       ! create ragged 3d array
+       allocate( work%mapping%vec( work%ncol_y ), &
+            stat=status )
+       if( status /= 0 ) goto 100
+       posn = 0
+       do i = 1, work%ncol_y
+          posn = posn + 1
+          if( posn > size( packed_map ) ) goto 170 
+          if( packed_map(posn) /= work%n_levels(i) ) goto 170
+          allocate( work%mapping%vec(i)%vec( packed_map(posn) ), &
+               stat=status )
+          if( status /= 0 ) goto 180
+          do j = 1, work%n_levels(i)
+             posn = posn + 1
+             if( posn > size( packed_map ) ) goto 170 
+             kmax = packed_map(posn)
+             allocate( work%mapping%vec(i)%vec(j)%vec( kmax ), &
+                  stat=status )
+             if( status /= 0 ) goto 180
+             do k = 1, kmax
+                posn = posn + 1
+                if( posn > size( packed_map ) ) goto 170 
+                work%mapping%vec(i)%vec(j)%vec(k) = packed_map(posn)
+             end do
+          end do
+       end do
+       !
+       work%nitem = work%ncol_y
+       allocate( work%nlev( work%nitem ), stat=status )
+       if( status /= 0 ) goto 100
+       work%nlev(:) = work%n_base_levels(:)
+       allocate( work%mvcode( work%nitem ), stat=status )
+       if( status /= 0 ) goto 100
+       do i = 1, work%nitem
+          work%mvcode(i) = size( work%mapping%vec(i)%vec )
+       end do
+       !###
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+100    call err_handle(err, 1, &
+            comment = "Unable to allocate workspace array component" )
+       goto 800
+140    call err_handle(err, 1, &
+            comment = "Sizes of pred and ystar mismatched" )
+       goto 800
+150    call err_handle(err, 1, &
+            comment = "Argument freq_int has incorrect size" )
+       goto 800
+155    call err_handle(err, 1, &
+            comment = "Element of freq_int is negative" )
+       goto 800
+156    call err_handle(err, 1, &
+            comment = "All elements of freq_int are zero" )
+       goto 800
+160    call err_handle(err, 1, &
+            comment = "Size of n_levels_matrix not correct" )
+       goto 800
+170    call err_handle(err, 1, &
+            comment = "When creating mapping: array bounds exceeded" )
+       goto 800
+180    call err_handle(err, 1, &
+            comment = "When creating mapping: allocation error " )
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+    end function put_data_into_basic_workspace
+    !##################################################################
+    integer(kind=our_int) function setup_logit_workspace( &
+         method_int, baseline, row_posn_data_patt, freq_int_data_patt, &
+         row_posn_cov_patt, cov_patt_for_data_patt, &
+         prior_int, crit_em_null, flatten_em_null, prior_freq_tot_DAP, &
+         crit_em, crit_nr, &
+         iter_max_em_null, iter_max_em, start_val_use_int, iter_max_nr, &
+         beta, &
+         work, err ) &
+         result(answer)
+      ! create workspace objects
+      implicit none
+      ! declare inputs
+      integer(kind=our_int), intent(in) :: method_int
+      integer(kind=our_int), intent(in) :: baseline
+      integer(kind=our_int), intent(in) :: row_posn_data_patt(:)
+      integer(kind=our_int), intent(in) :: freq_int_data_patt(:)
+      integer(kind=our_int), intent(in) :: row_posn_cov_patt(:)
+      integer(kind=our_int), intent(in) :: cov_patt_for_data_patt(:)
+      integer(kind=our_int), intent(in) :: prior_int
+      real(kind=our_dble), intent(in) :: crit_em_null
+      real(kind=our_dble), intent(in) :: flatten_em_null
+      real(kind=our_dble), intent(in) :: prior_freq_tot_DAP
+      real(kind=our_dble), intent(in) :: crit_em
+      real(kind=our_dble), intent(in) :: crit_nr
+      integer(kind=our_int), intent(in) :: iter_max_em_null
+      integer(kind=our_int), intent(in) :: iter_max_em
+      integer(kind=our_int), intent(in) :: start_val_use_int
+      integer(kind=our_int), intent(in) :: iter_max_nr
+      real(kind=our_dble), intent(in) :: beta(:,:)
+      ! declare workspaces
+      type(workspace_type_cvam_basic), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! declare locals
+      integer(kind=our_int) :: status, i, isum, k, cur_cov_patt, &
+           cov_patt, data_patt, posn, j
+      character(len=*), parameter :: &
+           subname = "setup_logit_workspace"
+      ! begin
+      answer = RETURN_FAIL
+      if( work%model_type /= "logit" ) goto 50
+      if( method_int == 1 ) then
+         work%logit%method = "EM"
+      else if( method_int == 2 ) then
+         work%logit%method = "MCMC"
+      else
+         goto 120
+      end if
+      !
+      if( work%nrow_data < 1 ) goto 105
+      if( work%ncol_y < 1 ) goto 105
+      if( work%ncol_pred < 1 ) goto 105
+      if( work%nlev(1) < 2 ) goto 110
+      !
+      work%logit%nrow = work%nrow_data
+      work%logit%nlev = work%nlev(1)
+      work%logit%ncol_x = work%ncol_pred
+      allocate( work%logit%xcol( work%logit%ncol_x ), stat=status )
+      if( status /= 0 ) goto 100
+      do i = 1, work%logit%ncol_x
+         work%logit%xcol(i) = i
+      end do
+      work%logit%ycol = 1
+      !
+      if( baseline < 1 ) goto 130      
+      if( baseline > work%nlev(1) ) goto 130    
+      work%logit%baseline = baseline
+      !
+      work%logit%n = work%logit%nrow
+      work%logit%r = work%logit%nlev
+      work%logit%p = work%logit%ncol_x
+      work%logit%d = work%logit%p  * ( work%logit%r - 1 )
+      !
+      if( size(row_posn_data_patt) < 1 ) goto 140
+      if( size(row_posn_data_patt) > work%nrow_data ) goto 140
+      work%logit%n_data_patt = size(row_posn_data_patt)
+      if( size(freq_int_data_patt) /= work%logit%n_data_patt ) goto 150
+      allocate( work%logit%row_posn_data_patt( work%logit%n_data_patt ), &
+           work%logit%freq_int_data_patt( work%logit%n_data_patt ), &
+           work%logit%freq_data_patt( work%logit%n_data_patt ), &
+           work%logit%pistar_data_patt( work%logit%n_data_patt ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      isum = 0
+      do i = 1, work%logit%n_data_patt
+         if( row_posn_data_patt(i) < 1 ) goto 160
+         if( row_posn_data_patt(i) > work%nrow_data ) goto 160
+         work%logit%row_posn_data_patt(i) = row_posn_data_patt(i)
+         if( freq_int_data_patt(i) < 0 ) goto 170
+         work%logit%freq_int_data_patt(i) = freq_int_data_patt(i)
+         isum = isum + freq_int_data_patt(i)
+         work%logit%freq_data_patt(i) = real( freq_int_data_patt(i), &
+              our_dble )
+      end do
+      if( isum /= work%data_freq_tot ) goto 180
+      !
+      if( size(row_posn_cov_patt) < 1 ) goto 190 
+      if( size(row_posn_cov_patt) > work%nrow_data ) goto 190
+      work%logit%n_cov_patt = size(row_posn_cov_patt)
+      allocate( work%logit%row_posn_cov_patt(work%logit%n_cov_patt), &
+           stat=status )
+      if( status /= 0 ) goto 100
+      do i = 1, work%logit%n_cov_patt
+         if( row_posn_cov_patt(i) < 1 ) goto 200
+         if( row_posn_cov_patt(i) > work%nrow_data ) goto 200
+         work%logit%row_posn_cov_patt(i) = row_posn_cov_patt(i)
+      end do
+      !
+      if( size(cov_patt_for_data_patt) /= work%logit%n_data_patt ) goto 205
+      allocate( work%logit%cov_patt_for_data_patt(work%logit%n_data_patt), &
+           stat=status )
+      if( status /= 0 ) goto 100
+      do i = 1, work%logit%n_data_patt
+         if( cov_patt_for_data_patt(i) < 1 ) goto 206
+         if( cov_patt_for_data_patt(i) > work%logit%n_cov_patt ) goto 206
+         work%logit%cov_patt_for_data_patt(i) = cov_patt_for_data_patt(i)
+      end do
+      !
+      allocate( work%logit%data_patt_st(work%logit%n_cov_patt), &
+           work%logit%data_patt_fin(work%logit%n_cov_patt), &
+           stat=status )
+      if( status /= 0 ) goto 100
+      cur_cov_patt = 0
+      posn = 0
+      do data_patt = 1, work%logit%n_data_patt
+         cov_patt = work%logit%cov_patt_for_data_patt( data_patt )
+         if( cov_patt /= cur_cov_patt ) then
+            posn = posn + 1
+            cur_cov_patt = cov_patt
+            if( posn > work%logit%n_cov_patt ) goto 202
+            work%logit%data_patt_st( posn ) = data_patt
+         end if
+      end do
+      if( posn /= work%logit%n_cov_patt ) goto 203
+      do posn = 2, work%logit%n_cov_patt
+         work%logit%data_patt_fin( posn - 1 ) = &
+              work%logit%data_patt_st( posn ) - 1
+      end do
+      work%logit%data_patt_fin( work%logit%n_cov_patt ) = &
+           work%logit%n_data_patt
+      !
+      allocate( work%logit%ystar_table( work%n_levels(1) ), &
+           stat=status )
+      if( status /= 0 ) goto 100
+      work%logit%ystar_table(:) = 0
+      do i = 1, work%nrow_data
+         k = work%ystar(i,1)
+         if( k < 1 ) goto 210
+         if( k > work%n_levels(1) ) goto 210
+         work%logit%ystar_table(k) = work%logit%ystar_table(k) + &
+              work%data_freq_int(i)
+      end do
+      !
+      allocate( work%logit%beta( work%logit%d ), &
+           work%logit%pimat( work%logit%n_cov_patt, work%logit%r ), &
+           work%logit%pinull( work%logit%r ), &
+           work%logit%pinull_new( work%logit%r ), stat = status )
+      if( status /= 0 ) goto 100
+      work%logit%beta(:) = 0.D0
+      work%logit%pimat(:,:) = 0.D0
+      work%logit%pinull(:) = 0.D0
+      work%logit%pinull_new(:) = 0.D0
+      !###
+      if( prior_int == 1 ) then
+         work%logit%prior = "none"
+      else if( prior_int == 2 ) then
+         work%logit%prior = "DAP"
+      else
+         goto 250
+      end if
+      !###
+      if( crit_em_null <= 0.D0 ) goto 300
+      work%logit%crit_em_null = crit_em_null
+      if( flatten_em_null < 0.D0 ) goto 310
+      work%logit%flatten_em_null = flatten_em_null
+      if( iter_max_em_null < 0 ) goto 320
+      work%logit%iter_max_em_null = iter_max_em_null
+      if( prior_freq_tot_DAP < 0.D0 ) goto 330
+      work%logit%prior_freq_tot_DAP = prior_freq_tot_DAP
+      !
+      if( crit_em <= 0.D0 ) goto 340
+      work%logit%crit_em = crit_em
+      if( crit_nr <= 0.D0 ) goto 341
+      work%logit%crit_nr = crit_nr
+      if( iter_max_em < 0 ) goto 350
+      work%logit%iter_max_em = iter_max_em
+      if( iter_max_nr < 0 ) goto 351
+      work%logit%iter_max_nr = iter_max_nr
+      allocate( &
+           work%logit%loglik_vec( work%logit%iter_max_em ), &
+           work%logit%logP_vec( work%logit%iter_max_em ), &
+           stat = status )      
+      if( status /= 0 ) goto 100
+      work%logit%loglik_vec(:) = 0.D0
+      work%logit%logP_vec(:) = 0.D0
+      !
+      allocate( work%logit%beta_new( work%logit%d ), &
+           work%logit%beta_nr( work%logit%d ), &
+           work%logit%beta_nr_new( work%logit%d ), &
+           work%logit%beta_tmp( work%logit%d ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      !
+      if( start_val_use_int == 0 ) then
+         work%logit%start_val_use = .false.
+         work%logit%beta_new(:) = 0.D0
+      else if( start_val_use_int == 1 ) then
+         work%logit%start_val_use = .true.
+         k = work%logit%baseline
+         do j = 1, work%logit%p
+            if( beta(j,k) /= 0.D0 ) goto 410
+         end do
+         posn = 0
+         do k = 1, work%logit%r
+            if( k == work%logit%baseline ) cycle
+            do j = 1, work%logit%p
+               posn = posn + 1
+               work%logit%beta_new(posn) = beta(j,k)
+            end do
+         end do
+      else
+         goto 400
+      end if
+      !
+      work%logit%loglik = 0.D0
+      work%logit%loglik_A = 0.D0
+      allocate( &
+           work%logit%prior_freq_cov_patt( work%logit%r ), &
+           work%logit%log_pi_cov_patt( work%logit%r ), &
+           work%logit%score( work%logit%d ), &
+           work%logit%score_A( work%logit%d ), &
+           work%logit%hess( work%logit%d, work%logit%d ), &
+           work%logit%hess_A( work%logit%d, work%logit%d ), &
+           work%logit%freq_data_patt_expected( &
+              work%logit%n_data_patt, work%logit%r ), &
+           work%logit%freq_cov_patt_expected( work%logit%r ), &
+           work%logit%active_y( work%logit%r ), &
+           work%logit%vhat_beta( work%logit%d, work%logit%d ), &
+           work%logit%dldpi( work%logit%r ), &
+           work%logit%dldpi_A( work%logit%r ), &
+           work%logit%dpidbeta( work%logit%r, work%logit%d ), &
+           work%logit%d2ldpi2( work%logit%r, work%logit%r ), &
+           work%logit%d2ldpi2_A( work%logit%r, work%logit%r ), &
+           work%logit%d2pidbeta2( work%logit%r, &
+              work%logit%d, work%logit%d ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      work%logit%prior_freq_cov_patt(:) = 0.D0
+      work%logit%log_pi_cov_patt(:) = 0.D0
+      work%logit%score(:) = 0.D0
+      work%logit%score_A(:) = 0.D0
+      work%logit%hess(:,:) = 0.D0
+      work%logit%hess_A(:,:) = 0.D0
+      work%logit%freq_data_patt_expected(:,:) = 0.D0
+      work%logit%freq_cov_patt_expected(:) = 0.D0
+      work%logit%active_y(:) = .false.
+      work%logit%vhat_beta(:,:) = 0.D0
+      work%logit%dldpi(:) = 0.D0
+      work%logit%dldpi_A(:) = 0.D0
+      work%logit%dpidbeta(:,:) = 0.D0
+      work%logit%d2ldpi2(:,:) = 0.D0
+      work%logit%d2ldpi2_A(:,:) = 0.D0
+      work%logit%d2pidbeta2(:,:,:) = 0.D0
+      !
+      allocate( work%logit%wkrA( work%logit%r ), &
+           work%logit%wkrB( work%logit%r ), &
+           work%logit%wkdA( work%logit%d ), &
+           work%logit%wkdB( work%logit%d ), &
+           work%logit%wkddA( work%logit%d, work%logit%d ), &
+           work%logit%wkddB( work%logit%d, work%logit%d ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      ! normal exit
+      answer = RETURN_SUCCESS
+      goto 999
+      ! error traps
+50    call err_handle(err, 1, &
+           comment = "This is not a logit model" )
+      goto 800
+100   call err_handle(err, 1, &
+           comment = "Unable to allocate workspace array component" )
+      goto 800
+105   call err_handle(err, 1, &
+           comment = "Insufficient data to define model" )
+      goto 800
+110   call err_handle(err, 1, &
+           comment = "Response has less than two levels" )
+      goto 800
+120   call err_handle(err, 1, &
+           comment = "Value of method not recognized" )
+      goto 800
+130   call err_handle(err, 1, &
+           comment = "Value of baseline out of range" )
+      goto 800
+140   call err_handle(err, 1, &
+           comment = "Array row_posn_data_patt has incorrect size" )
+      goto 800
+150   call err_handle(err, 1, &
+           comment = "Array freq_int_data_patt has incorrect size" )
+      goto 800
+160   call err_handle(err, 1, &
+           comment = "Element of row_posn_data_patt out of range" )
+      goto 800
+170   call err_handle(err, 1, &
+           comment = "Element of freq_int_data_patt is negative" )
+      goto 800
+180   call err_handle(err, 1, &
+           comment = "Elements of freq_int_data_patt do not add up" )
+      goto 800
+190   call err_handle(err, 1, &
+           comment = "Array row_posn_cov_patt has incorrect size" )
+      goto 800
+200   call err_handle(err, 1, &
+           comment = "Element of row_posn_cov_patt out of range" )
+      goto 800
+202   call err_handle(err, 1, &
+           comment = "Array bounds exceeded for data_patt_st" ) 
+      goto 800
+203   call err_handle(err, 1, &
+           comment = "Bad data in cov_patt_for_data_patt" ) 
+      goto 800
+205   call err_handle(err, 1, &
+           comment = "Array cov_pattfor_data_patt has incorrect size" )
+      goto 800
+206   call err_handle(err, 1, &
+           comment = "Element of cov_patt_for_data_patt out of range" )
+      goto 800
+210   call err_handle(err, 1, &
+           comment = "Element of ystar out of range" )
+      goto 800
+250   call err_handle(err, 1, &
+           comment = "Value of prior not recognized" )
+      goto 800
+300   call err_handle(err, 1, &
+           comment = "Non-positive value for crit_em_null" )
+      goto 800
+310   call err_handle(err, 1, &
+           comment = "Negative value for flatten_em_null" )
+      goto 800
+320   call err_handle(err, 1, &
+           comment = "Negative value for iter_max_em_null" )
+      goto 800
+330   call err_handle(err, 1, &
+           comment = "Negative value for prior_freq_tot_DAP" )
+      goto 800
+340   call err_handle(err, 1, &
+           comment = "Non-positive value for crit_em" )
+      goto 800
+341   call err_handle(err, 1, &
+           comment = "Non-positive value for crit_nr" )
+      goto 800
+350   call err_handle(err, 1, &
+           comment = "Negative value for iter_max_em" )
+      goto 800
+351   call err_handle(err, 1, &
+           comment = "Negative value for iter_max_nr" )
+      goto 800
+400   call err_handle(err, 1, &
+           comment = "Value of start_val_use_int not recognized" )
+      goto 800
+410   call err_handle(err, 1, &
+           comment = "Starting value in beta does not satisfy constraint" )
+      goto 800
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+      goto 999
+      ! cleanup
+999   continue
+    end function setup_logit_workspace
+    !##################################################################
+    integer(kind=our_int) function run_logit_em_null( work, logit, &
+         err ) result(answer)
+       ! EM algorithm to estimate marginal response probabilities
+       implicit none
+       ! declare workspaces
+       type(workspace_type_cvam_basic), intent(inout) :: work
+       type(workspace_type_cvam_logit), intent(inout) :: logit
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: ycol, nlev_ystar, mvcode, &
+            ystar, size_mapset, j, k
+       real(kind=our_dble) :: rtmp, sum
+       character(len=*), parameter :: &
+            subname = "run_logit_em_null"
+       ! begin
+       answer = RETURN_FAIL
+       !
+       ycol = logit%ycol  ! column of work%ystar
+       nlev_ystar = work%n_levels(ycol)
+       mvcode = work%mvcode(ycol)
+       logit%pinull_new(:) = 1.D0 / real(logit%nlev, our_dble) ! uniform table
+       logit%iter_em_null = 0
+       logit%converged_em_null = .false.
+       do
+          if( logit%iter_em_null >= logit%iter_max_em_null ) exit
+          if( logit%converged_em_null ) exit
+          logit%iter_em_null = logit%iter_em_null + 1
+          logit%pinull(:) = logit%pinull_new(:)
+          ! do the E-step
+          logit%pinull_new(:) = logit%flatten_em_null
+          do ystar = 1, nlev_ystar
+             if( ystar == mvcode ) cycle
+             rtmp = real(logit%ystar_table(ystar), our_dble)
+             sum = 0.D0
+             size_mapset = size( work%mapping%vec(ycol)%vec(ystar)%vec )
+             do j = 1, size_mapset
+                k = work%mapping%vec(ycol)%vec(ystar)%vec(j)
+                if( logit%pinull(k) < 0.D0 ) goto 150
+                sum = sum + logit%pinull(k)
+             end do
+             if( ( rtmp > 0.D0 ) .and. ( sum == 0.D0 ) ) goto 200
+             do j = 1, size_mapset
+                k = work%mapping%vec(ycol)%vec(ystar)%vec(j)
+                logit%pinull_new(k) = logit%pinull_new(k) + &
+                     rtmp * logit%pinull(k) / sum
+             end do
+          end do
+          ! do the M-step
+          sum = 0.D0
+          do k = 1, logit%r
+             sum = sum + logit%pinull_new(k)
+          end do
+          if( sum == 0.D0 ) goto 250
+          do k = 1, logit%r
+             logit%pinull_new(k) = logit%pinull_new(k) / sum
+          end do
+          ! assess convergence
+          logit%converged_em_null = .true.
+          do k = 1, logit%r
+             if( abs( logit%pinull_new(k) - logit%pinull(k) ) &
+                  > logit%crit_em_null ) then
+                logit%converged_em_null = .false.
+                exit
+             end if
+          end do
+       end do
+       !###
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+150    call err_handle(err, 1, &
+           comment = "Negative probability encountered" )
+       goto 800
+200    call err_handle(err, 1, &
+           comment = "Zero probability assigned to non-empty levels" )
+       goto 800
+250    call err_handle(err, 1, &
+           comment = "Attempted division by zero" )
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function run_logit_em_null
+    !##################################################################
+    integer(kind=our_int) function run_logit_em( work, logit, &
+         err ) result(answer)
+       implicit none
+       ! declare workspaces
+       type(workspace_type_cvam_basic), intent(inout) :: work
+       type(workspace_type_cvam_logit), intent(inout) :: logit
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: ycol, nlev_ystar, mvcode, j, k
+       real(kind=our_dble) :: sum
+       logical :: aborted, aborted_nr, failed
+       character(len=*), parameter :: &
+            subname = "run_logit_em"
+       ! begin
+       answer = RETURN_FAIL
+       !
+       ycol = logit%ycol  ! column of work%ystar
+       nlev_ystar = work%n_levels(ycol)
+       mvcode = work%mvcode(ycol)
+       logit%iter_em = 0
+       logit%converged_em = .false.
+       aborted = .false.
+       do
+          if( logit%iter_em >= logit%iter_max_em ) exit
+          if( logit%converged_em ) exit
+          aborted = .true.   ! set to .false. at end of iteration
+          logit%iter_em = logit%iter_em + 1
+          logit%beta(:) = logit%beta_new(:)
+          ! do the E-step
+          if( compute_pimat_logit( work, logit, err ) &
+               == RETURN_FAIL ) exit
+          if(  compute_freq_data_patt_expected_logit( work, logit, &
+               .true., err ) == RETURN_FAIL ) exit
+          logit%loglik_vec( logit%iter_em ) = logit%loglik
+          logit%logP_vec( logit%iter_em ) = logit%loglik + logit%logprior
+          ! do the M-step
+          logit%beta_tmp(:) = logit%beta(:)  ! to restore later
+          logit%beta_nr_new(:) = logit%beta(:)
+          logit%iter_nr = 0
+          logit%converged_nr = .false.
+          aborted_nr = .false.
+          do
+             if( logit%iter_nr >= logit%iter_max_nr ) exit
+             if( logit%converged_nr ) exit
+             aborted_nr = .true.
+             logit%iter_nr = logit%iter_nr + 1
+             logit%beta(:) = logit%beta_nr_new(:)
+             if( logit%iter_nr > 1 ) then
+                if( compute_pimat_logit( work, logit, err ) &
+                     == RETURN_FAIL ) exit
+             end if
+             if( compute_logp_A_score_hess_logit( work, logit, err ) &
+                  == RETURN_FAIL ) exit
+             ! put negative hessian into wkddA and inverse into wkddB
+             logit%wkddA(:,:) = - logit%hess_A(:,:)
+             if( cholesky_in_place(logit%wkddA, err ) &
+                  == RETURN_FAIL ) exit
+             if( invert_lower(logit%wkddA, err ) == RETURN_FAIL ) exit
+             if( premult_lower_by_transpose( logit%wkddA, &
+                  logit%wkddB, err) == RETURN_FAIL ) exit
+             do j = 1, logit%d
+                sum = 0.D0
+                do k = 1, logit%d
+                   sum = sum + logit%wkddB(j,k) * logit%score_A(k)
+                end do
+                logit%wkdA(j) = logit%beta(j) + sum
+             end do
+             logit%beta_nr_new(:) = logit%wkdA(:)
+             ! detect convergence
+             logit%max_diff_nr = 0.D0
+             do j = 1, logit%d
+                logit%max_diff_nr = max( logit%max_diff_nr, &
+                     abs( logit%beta_nr_new(j) - logit%beta(j) ) )
+             end do
+             if( logit%max_diff_nr <= logit%crit_nr ) then
+                logit%converged_nr = .true.
+             end if
+             aborted_nr = .false.
+          end do
+          !
+          logit%beta(:) = logit%beta_tmp(:)
+          if( aborted_nr) then
+             call err_handle(err, 1, &
+                  comment = "NR algorithm aborted" )
+             call err_handle(err, 5, iiter = logit%iter_nr )
+             exit
+          end if
+          logit%beta_new(:) = logit%beta_nr_new(:)
+          ! assess convergence
+          logit%max_diff_em = 0.D0
+          do k = 1, logit%d
+             logit%max_diff_em = max( logit%max_diff_em, &
+                  abs( logit%beta_new(k) - logit%beta(k) ) )
+          end do
+          if( logit%max_diff_em <= logit%crit_em ) logit%converged_em = .true.
+          aborted = .false.
+       end do
+       !
+       if( aborted ) then
+          call err_handle(err, 1, &
+               comment = "EM algorithm aborted" )
+          call err_handle(err, 5, iiter = logit%iter_em )
+          logit%beta_new(:) = logit%beta(:)
+          logit%vhat_beta(:,:) = 0.D0
+       else
+          ! obtain vhat_beta
+          logit%beta(:) = logit%beta_new(:)
+          failed = .false.
+          if( compute_pimat_logit( work, logit, err ) &
+               == RETURN_FAIL ) goto 800
+          if( compute_logp_score_hess_logit( work, logit, err ) &
+               == RETURN_FAIL ) failed = .true.
+          if( .not. failed ) then
+             logit%wkddA(:,:) = - logit%hess(:,:)
+             if( cholesky_in_place( logit%wkddA, err ) &
+                  == RETURN_FAIL ) failed = .true.
+          end if
+          if( .not. failed ) then
+             if( invert_lower( logit%wkddA, err ) &
+                  == RETURN_FAIL ) failed = .true.
+          end if
+          if( .not. failed ) then
+             if( premult_lower_by_transpose( logit%wkddA, &
+                  logit%vhat_beta, err ) == RETURN_FAIL ) failed = .true.
+          end if
+          if( failed ) then
+             call err_handle(err, 1, &
+                  comment = "logP is not concave" )
+             call err_handle(err, 1, &
+                  comment = "Estimated cov. matrix for beta not available" )
+             logit%vhat_beta(:,:) = 0.D0
+          end if
+       end if
+       !###
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function run_logit_em
+     !##################################################################
+     integer(kind=our_int) function compute_pimat_logit( work, logit, &
+         err ) result(answer)
+       ! computes pi matrix from beta vector in logit workspace
+       implicit none
+       ! declare workspaces
+       type(workspace_type_cvam_basic), intent(inout) :: work
+       type(workspace_type_cvam_logit), intent(inout) :: logit
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: i, j, posn, k,  patt
+       real(kind=our_dble) :: sum, eta_max
+       character(len=*), parameter :: &
+            subname = "compute_pimat_logit"
+       ! begin
+       answer = RETURN_FAIL
+       !####
+       do patt = 1, logit%n_cov_patt
+          i = logit%row_posn_cov_patt(patt)
+          posn = 0
+          do j = 1, logit%r
+             if( j == logit%baseline ) then
+                logit%wkrA(j) = 0.D0
+                cycle
+             end if
+             sum = 0.D0
+             do k = 1, logit%p
+                posn = posn + 1
+                sum = sum + work%pred(i, logit%xcol(k)) * &
+                     logit%beta(posn)
+             end do
+             logit%wkrA(j) = sum
+          end do
+          eta_max = log_tiny
+          do j = 1, logit%r
+             eta_max = max(eta_max, logit%wkrA(j))
+          end do
+          logit%wkrA(:) = logit%wkrA(:) - eta_max
+          sum = 0.D0
+          do j = 1, logit%r
+             if( logit%wkrA(j) < log_tiny ) then
+                logit%wkrB(j) = 0.D0
+             else if( logit%wkrA(j) > log_huge ) then
+                goto 100
+             else
+                logit%wkrB(j) = exp( logit%wkrA(j) )
+             end if
+             sum = sum + logit%wkrB(j)
+          end do
+          if( sum == 0.D0 ) goto 200
+          do j = 1, logit%r
+             logit%pimat(patt,j) = logit%wkrB(j) / sum
+          end do
+       end do
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+100    call err_handle(err, 1, &
+            comment = "Overflow; fitted value became too large" )
+       call err_handle(err, 3, iobs=i)
+       goto 800
+200    call err_handle(err, 1, &
+            comment = "Attempted division by zero" )
+       call err_handle(err, 3, iobs=i)
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function compute_pimat_logit
+     !##################################################################
+     integer(kind=our_int) function compute_freq_data_patt_expected_logit( &
+          work, logit, omit_missing, err ) result(answer)
+       ! computes expected augmented-data frequencies at current value
+       ! of beta; should be run after compute_pimat_logit
+       ! if omit_missing is .true., then missing values are skipped
+       ! Also computes the observed-data loglikelihood and logprior density
+       implicit none
+       ! declare workspaces
+       type(workspace_type_cvam_basic), intent(inout) :: work
+       type(workspace_type_cvam_logit), intent(inout) :: logit
+       logical, intent(in) :: omit_missing
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: patt, i, y, ystar, size_mapset, ycol, j, &
+            cov_patt, mvcode
+       real(kind=our_dble) :: sum, rtmp
+       character(len=*), parameter :: &
+            subname = "compute_freq_data_patt_expected_logit"
+       ! begin
+       answer = RETURN_FAIL
+       !####
+       ycol = logit%ycol
+       mvcode = work%mvcode( ycol )
+       ! compute logprior
+       logit%logprior = 0.D0
+       if( logit%prior == "DAP" ) then
+          do cov_patt = 1, logit%n_cov_patt
+             do y = 1, logit%r
+                if( logit%prior_freq_cov_patt(y) > 0.D0 ) then
+                   if( logit%pimat(cov_patt, y) <= 0.D0 ) goto 300
+                   logit%logprior = logit%logprior + &
+                        logit%prior_freq_cov_patt(y) * &
+                        log( logit%pimat(cov_patt, y) )
+                end if
+             end do
+          end do
+       end if
+       !
+       logit%loglik = 0.D0
+       do patt = 1, logit%n_data_patt
+          i = logit%row_posn_data_patt( patt )
+          cov_patt = logit%cov_patt_for_data_patt( patt )
+          ystar = work%ystar(i, ycol )
+          if( omit_missing .and. ( ystar == mvcode ) ) then
+             logit%freq_data_patt_expected(patt,:) = 0.D0
+             cycle
+          end if
+          sum = 0.D0
+          size_mapset = size( work%mapping%vec(ycol)%vec(ystar)%vec )
+          do j = 1, size_mapset
+             y = work%mapping%vec(ycol)%vec(ystar)%vec(j)
+             if( logit%pimat(cov_patt,y) < 0.D0 ) goto 150
+             sum = sum + logit%pimat(cov_patt,y)
+          end do
+          rtmp = logit%freq_data_patt(patt)
+          if( rtmp > 0.D0 ) then
+             if( sum <= 0.D0 ) goto 200
+             logit%loglik = logit%loglik + rtmp * log(sum)
+          end if
+          do j = 1, size_mapset
+             y = work%mapping%vec(ycol)%vec(ystar)%vec(j)
+             logit%freq_data_patt_expected(patt,y) = &
+                  rtmp * logit%pimat(cov_patt,y) / sum
+          end do
+       end do
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+150    call err_handle(err, 1, &
+           comment = "Negative probability encountered" )
+       goto 800
+200    call err_handle(err, 1, &
+            comment = "Attempted division by zero" )
+       call err_handle(err, 3, iobs=i)
+       goto 800
+300    call err_handle(err, 1, &
+            comment = "Positive frequency seen for event of prob=0" )
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function compute_freq_data_patt_expected_logit
+     !##################################################################
+     integer(kind=our_int) function compute_logp_A_score_hess_logit( &
+          work, logit, err ) result(answer)
+       ! Computes augmented-data log-posterior density and derivatives
+       ! at current value of beta
+       ! Note: compute_pimat_logit and
+       ! compute_freq_data_patt_expected_logit should be run first
+       implicit none
+       ! declare workspaces
+       type(workspace_type_cvam_basic), intent(inout) :: work
+       type(workspace_type_cvam_logit), intent(inout) :: logit
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: cov_patt, patt, j, k, y, st, fin, posn, &
+            l, m, posnA, i
+       logical :: done
+       real(kind=our_dble) :: rtmpA, rtmpB, rtmp
+       real(kind=our_dble), parameter :: &
+            tiney = tiny( real(0,kind=our_dble) )
+       character(len=*), parameter :: &
+            subname = "compute_logP_A_score_hess_logit"
+       ! begin
+       answer = RETURN_FAIL
+       !####
+       logit%logprior = 0.D0
+       logit%loglik_A = 0.D0
+       logit%score_A(:) = 0.D0
+       logit%hess_A(:,:) = 0.D0
+       !
+       do cov_patt = 1, logit%n_cov_patt
+          i = logit%row_posn_cov_patt(cov_patt)
+          ! find y-values that are active in the covariate pattern, and
+          ! compute total expected frequencies for the covariate pattern
+          st = logit%data_patt_st(cov_patt)
+          fin = logit%data_patt_fin(cov_patt)
+          logit%freq_cov_patt_expected(:) = 0.D0
+          do patt = st, fin
+             do y = 1, logit%r
+                logit%freq_cov_patt_expected(y) = &
+                     logit%freq_cov_patt_expected(y) + &
+                     logit%freq_data_patt_expected(patt, y)
+             end do
+          end do
+          logit%active_y(:) = .false.
+          do y = 1, logit%r
+             rtmp = logit%prior_freq_cov_patt(y) + &
+                  logit%freq_cov_patt_expected(y)
+             if( rtmp > 0.D0 ) logit%active_y(y) = .true.
+          end do
+          ! compute derivatives of pi wrt beta for active levels of y
+          do y = 1, logit%r
+             if( .not. logit%active_y(y) ) cycle
+             posn = 0
+             do k = 1, logit%r
+                if( k == logit%baseline ) cycle
+                do j = 1, logit%p
+                   posn = posn + 1
+                   if( k == y ) then
+                      rtmp = 1.D0
+                   else
+                      rtmp = 0.D0
+                   end if
+                   logit%dpidbeta(y, posn) = logit%pimat(cov_patt, y) * &
+                        ( rtmp - logit%pimat(cov_patt, k) ) * &
+                         work%pred(i, logit%xcol(j))
+                   done = .false.
+                   posnA = 0
+                   do m = 1, logit%r
+                      if( m == logit%baseline ) cycle
+                      if( k == m ) then
+                         rtmpA = 1.D0
+                      else
+                         rtmpA = 0.D0
+                      end if
+                      if( m == y ) then
+                         rtmpB = 1.D0
+                      else
+                         rtmpB = 0.D0
+                      end if
+                      do l = 1, logit%p
+                         posnA = posnA + 1
+                         if( posnA > posn ) then
+                            done = .true.
+                            exit
+                         end if
+                         logit%d2pidbeta2(y, posn, posnA) = &
+                              - logit%pimat(cov_patt, y) * ( &
+                              logit%pimat(cov_patt, k ) * &
+                              ( rtmpA - logit%pimat(cov_patt, m ) ) &
+                              - ( rtmp - logit%pimat(cov_patt, k ) ) &
+                              * ( rtmpB - logit%pimat(cov_patt, m ) ) &
+                              ) * work%pred(i, logit%xcol(j)) * &
+                              work%pred(i, logit%xcol(l))
+                      end do
+                      if( done ) exit
+                   end do
+                end do
+             end do
+          end do
+          ! increment logprior, loglik_A, score_A, hess_A
+          do y = 1, logit%r
+             if( .not. logit%active_y(y) ) cycle
+             rtmp = logit%prior_freq_cov_patt(y) + &
+                  logit%freq_cov_patt_expected(y)
+             if( logit%pimat(cov_patt, y) == 0.D0 ) goto 200
+             rtmpA = 1.D0 / logit%pimat(cov_patt, y)
+             if( logit%pimat(cov_patt, y) < 0.D0 ) goto 210
+             rtmpB = log( logit%pimat(cov_patt, y) )
+             logit%logprior = logit%logprior + &
+                  logit%prior_freq_cov_patt(y) * rtmpB
+             logit%loglik_A = logit%loglik_A + &
+                  logit%freq_cov_patt_expected(y) * rtmpB
+             posn = 0
+             do k = 1, logit%r
+                if( k == logit%baseline ) cycle
+                do j = 1, logit%p
+                   posn = posn + 1
+                   logit%score_A(posn) = logit%score_A(posn) + &
+                        rtmp * rtmpA * logit%dpidbeta(y, posn)
+                   done = .false.
+                   posnA = 0
+                   do m = 1, logit%r
+                      if( m == logit%baseline ) cycle
+                      do l = 1, logit%p
+                         posnA = posnA + 1
+                         if( posnA > posn ) then
+                            done = .true.
+                            exit
+                         end if
+                         logit%hess_A(posn, posnA) = &
+                              logit%hess_A(posn, posnA) + rtmp * ( &
+                              rtmpA * logit%d2pidbeta2(y, posn, posnA) &
+                              - ( rtmpA**2 ) * logit%dpidbeta(y, posn) &
+                              * logit%dpidbeta(y, posnA) )
+                      end do
+                      if( done ) exit
+                   end do
+                end do
+             end do
+          end do
+       end do
+       !
+       ! fill in upper triangle of hess_A
+       do posn = 1, logit%d
+          do posnA = posn + 1, logit%d
+             logit%hess_A(posn, posnA) = logit%hess_A(posnA, posn)
+          end do
+       end do
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+200    call err_handle(err, 1, &
+            comment = "Attempted division by zero" )
+       goto 800
+210    call err_handle(err, 1, &
+            comment = "Attempted logarithm of non-positive number" )
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function compute_logp_A_score_hess_logit
+     !##################################################################
+     integer(kind=our_int) function get_beta_logit( logit, beta, err ) &
+          result(answer)
+       implicit none
+       real(kind=our_dble), intent(out) :: beta(:,:)
+       ! declare workspaces
+       type(workspace_type_cvam_logit), intent(inout) :: logit
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: j, k, posn
+       character(len=*), parameter :: &
+            subname = "get_beta_logit"
+       ! begin
+       answer = RETURN_FAIL
+       !####
+       if( size(beta,1) /= logit%p ) goto 100
+       if( size(beta,2) /= logit%r ) goto 100
+       beta( :, logit%baseline ) = 0.D0
+       posn = 0
+       do k = 1, logit%r
+          if( k == logit%baseline ) cycle
+          do j = 1, logit%p
+             posn = posn + 1
+             beta(j,k) = logit%beta(posn)
+          end do
+       end do
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+100    call err_handle(err, 1, &
+            comment = "Array beta has incorrect dimensions" )
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function get_beta_logit
+     !##################################################################
+     integer(kind=our_int) function compute_logp_score_hess_logit( &
+          work, logit, err ) result(answer)
+       ! Computes observed-data log-posterior density and derivatives
+       ! at current value of beta
+       ! Note: compute_pimat_logit should be run first
+       implicit none
+       ! declare workspaces
+       type(workspace_type_cvam_basic), intent(inout) :: work
+       type(workspace_type_cvam_logit), intent(inout) :: logit
+       type(error_type), intent(inout) :: err
+       ! declare locals
+       integer(kind=our_int) :: cov_patt, patt, j, k, y, st, fin, posn, &
+            l, m, posnA, i, mvcode, ycol, size_mapset, ystar, jj
+       logical :: done
+       real(kind=our_dble) :: sum, rtmp, rtmpA, rtmpB
+       real(kind=our_dble), parameter :: &
+            tiney = tiny( real(0,kind=our_dble) )
+       character(len=*), parameter :: &
+            subname = "compute_logP_score_hess_logit"
+       ! begin
+       answer = RETURN_FAIL
+       !####
+       ycol = logit%ycol
+       mvcode = work%mvcode( ycol )
+       logit%logprior = 0.D0
+       logit%loglik = 0.D0
+       logit%score(:) = 0.D0
+       logit%hess(:,:) = 0.D0
+       !
+       do cov_patt = 1, logit%n_cov_patt
+          ! find y-values that are active in the covariate pattern, while
+          ! accumulating logprior and loglik
+          st = logit%data_patt_st(cov_patt)
+          fin = logit%data_patt_fin(cov_patt)
+          if( logit%prior == "DAP" ) then
+             logit%active_y(:) = .true.
+             do y = 1, logit%r
+                if( logit%prior_freq_cov_patt(y) <= 0.D0 ) cycle
+                if( logit%pimat(cov_patt, y) == 0.D0 ) goto 110
+                if( logit%pimat(cov_patt, y) < 0.D0 ) goto 210
+                logit%logprior = logit%logprior + &
+                     logit%prior_freq_cov_patt(y) * &
+                     log( logit%pimat(cov_patt, y) )
+             end do
+          else
+             logit%active_y(:) = .false.
+          end if
+          do patt = st, fin
+             if( logit%freq_data_patt(patt) == 0.D0 ) cycle
+             i = logit%row_posn_data_patt(patt)
+             ystar = work%ystar(i, ycol )
+             if( ystar == mvcode ) then
+                logit%pistar_data_patt(patt) = 1.D0
+                cycle
+             end if
+             size_mapset = size( work%mapping%vec(ycol)%vec(ystar)%vec )
+             sum = 0.D0
+             do j = 1, size_mapset
+                y = work%mapping%vec(ycol)%vec(ystar)%vec(j)
+                sum = sum + logit%pimat(cov_patt, y)
+                logit%active_y(y) = .true.
+             end do
+             logit%pistar_data_patt(patt) = sum
+             if( sum == 0.D0 ) goto 110
+             if( sum < 0.D0 ) goto 210
+             logit%loglik = logit%loglik + &
+                  logit%freq_data_patt(patt) * log( sum )
+          end do
+          ! compute derivatives of pi wrt beta for active levels of y
+          do y = 1, logit%r
+             if( .not. logit%active_y(y) ) cycle
+             posn = 0
+             do k = 1, logit%r
+                if( k == logit%baseline ) cycle
+                do j = 1, logit%p
+                   posn = posn + 1
+                   if( k == y ) then
+                      rtmp = 1.D0
+                   else
+                      rtmp = 0.D0
+                   end if
+                   logit%dpidbeta(y, posn) = logit%pimat(cov_patt, y) * &
+                        ( rtmp - logit%pimat(cov_patt, k) ) * &
+                         work%pred(i, logit%xcol(j))
+                   done = .false.
+                   posnA = 0
+                   do m = 1, logit%r
+                      if( m == logit%baseline ) cycle
+                      if( k == m ) then
+                         rtmpA = 1.D0
+                      else
+                         rtmpA = 0.D0
+                      end if
+                      if( m == y ) then
+                         rtmpB = 1.D0
+                      else
+                         rtmpB = 0.D0
+                      end if
+                      do l = 1, logit%p
+                         posnA = posnA + 1
+                         if( posnA > posn ) then
+                            done = .true.
+                            exit
+                         end if
+                         logit%d2pidbeta2(y, posn, posnA) = &
+                              - logit%pimat(cov_patt, y) * ( &
+                              logit%pimat(cov_patt, k ) * &
+                              ( rtmpA - logit%pimat(cov_patt, m ) ) &
+                              - ( rtmp - logit%pimat(cov_patt, k ) ) &
+                              * ( rtmpB - logit%pimat(cov_patt, m ) ) &
+                              ) * work%pred(i, logit%xcol(j)) * &
+                              work%pred(i, logit%xcol(l))
+                      end do
+                      if( done ) exit
+                   end do
+                end do
+             end do
+          end do
+          ! increment score, hess for logprior
+          if( logit%prior == "DAP" ) then
+             do y = 1, logit%r
+                rtmp = logit%prior_freq_cov_patt(y)
+                if( logit%pimat(cov_patt, y) <= 0.D0 ) goto 200
+                rtmpA = 1.D0 / logit%pimat(cov_patt, y)
+                posn = 0
+                do k = 1, logit%r
+                   if( k == logit%baseline ) cycle
+                   do j = 1, logit%p
+                      posn = posn + 1
+                      logit%score(posn) = logit%score(posn) + &
+                           rtmp * rtmpA * logit%dpidbeta(y, posn)
+                      done = .false.
+                      posnA = 0
+                      do m = 1, logit%r
+                         if( m == logit%baseline ) cycle
+                         do l = 1, logit%p
+                            posnA = posnA + 1
+                            if( posnA > posn ) then
+                               done = .true.
+                               exit
+                            end if
+                            logit%hess(posn, posnA) = &
+                                 logit%hess(posn, posnA) + rtmp * ( &
+                                 rtmpA * logit%d2pidbeta2(y, posn, posnA) &
+                                 - ( rtmpA**2 ) * logit%dpidbeta(y, posn) &
+                                 * logit%dpidbeta(y, posnA) )
+                         end do
+                         if( done ) exit
+                      end do
+                   end do
+                end do
+             end do
+          end if
+          ! increment score, hess for loglik
+          do patt = st, fin
+             rtmp = logit%freq_data_patt(patt)
+             if( rtmp == 0.D0 ) cycle
+             i = logit%row_posn_data_patt(patt)
+             ystar = work%ystar(i, ycol )
+             if( ystar == mvcode ) cycle
+             if( logit%pistar_data_patt(patt) <= 0.D0 ) goto 110
+             rtmpA = 1.D0 / logit%pistar_data_patt(patt)
+             size_mapset = size( work%mapping%vec(ycol)%vec(ystar)%vec )
+             logit%wkdA(:) = 0.D0
+             logit%wkddA(:,:) = 0.D0
+             do jj = 1, size_mapset
+                y = work%mapping%vec(ycol)%vec(ystar)%vec(jj)
+                posn = 0
+                do k = 1, logit%r
+                   if( k == logit%baseline ) cycle
+                   do j = 1, logit%p
+                      posn = posn + 1
+                      logit%wkdA(posn) = logit%wkdA(posn) + &
+                           logit%dpidbeta(y, posn )
+                      done = .false.
+                      posnA = 0
+                      do m = 1, logit%r
+                         if( m == logit%baseline ) cycle
+                         do l = 1, logit%p
+                            posnA = posnA + 1
+                            if( posnA > posn ) then
+                               done = .true.
+                               exit
+                            end if
+                            logit%wkddA( posn, posnA ) = &
+                                 logit%wkddA( posn, posnA ) + &
+                                 logit%d2pidbeta2(y, posn, posnA)
+                         end do
+                         if( done ) exit
+                      end do
+                   end do
+                end do
+             end do
+             !
+             posn = 0
+             do k = 1, logit%r
+                if( k == logit%baseline ) cycle
+                do j = 1, logit%p
+                   posn = posn + 1
+                   logit%score(posn) = logit%score(posn) + &
+                        rtmp * rtmpA * logit%wkdA(posn)
+                   done = .false.
+                   posnA = 0
+                   do m = 1, logit%r
+                      if( m == logit%baseline ) cycle
+                      do l = 1, logit%p
+                         posnA = posnA + 1
+                         if( posnA > posn ) then
+                            done = .true.
+                            exit
+                         end if
+                         logit%hess(posn, posnA) = logit%hess(posn, posnA) &
+                              + rtmp * ( rtmpA * logit%wkddA(posn, posnA) &
+                              - (rtmpA**2) * logit%wkdA(posn) &
+                              * logit%wkdA(posnA) )
+                      end do
+                      if( done ) exit
+                   end do
+                end do
+             end do
+          end do
+       end do
+       ! fill in upper triangle of hess
+       do posn = 1, logit%d
+          do posnA = posn + 1, logit%d
+             logit%hess(posn, posnA) = logit%hess(posnA, posn)
+          end do
+       end do
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+110    call err_handle(err, 1, &
+            comment = "Positive frequency seen for event of prob=0" )
+       goto 800
+200    call err_handle(err, 1, &
+            comment = "Attempted division by zero" )
+       goto 800
+210    call err_handle(err, 1, &
+            comment = "Attempted logarithm of non-positive number" )
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function compute_logp_score_hess_logit
+     !##################################################################
+    integer(kind=our_int) function run_cvam_lcmeas( &
+         method_int, x, ystar, freq_int, &
+         n_levels_matrix, packed_map, baseline, &
+         ncol_x, xcol, &
+         logit_cov_patt, logit_data_patt, &
+         n_cov_patt, n_data_patt, &
+         row_posn_cov_patt, row_posn_data_patt, cov_patt_for_data_patt, &
+         logit_prior_int, crit_em_null, flatten_em_null, &
+         crit_em, crit_nr, crit_em_item, start_val_jitter, &
+         logit_prior_strength, &
+         iter_max_em_null, iter_max_em, iter_max_nr, iter_max_em_item, &
+         start_val_use_int, params, &
+         work, err, &
+         iter, converged, max_diff, loglik, logP &
+         ) result(answer)
+      implicit none
+      ! declare inputs
+      integer(kind=our_int), intent(in) :: method_int
+      real(kind=our_dble), intent(in) :: x(:,:)
+      integer(kind=our_int), intent(in) :: ystar(:,:)
+      integer(kind=our_int), intent(in) :: freq_int(:)
+      integer(kind=our_int), intent(in) :: n_levels_matrix(:,:)
+      integer(kind=our_int), intent(in) :: packed_map(:)
+      integer(kind=our_int), intent(in) :: baseline(:)
+      integer(kind=our_int), intent(in) :: ncol_x(:)
+      integer(kind=our_int), intent(in) :: xcol(:)
+      integer(kind=our_int), intent(in) :: logit_cov_patt(:,:)
+      integer(kind=our_int), intent(in) :: logit_data_patt(:,:)
+      integer(kind=our_int), intent(in) :: n_cov_patt(:)
+      integer(kind=our_int), intent(in) :: n_data_patt(:)
+      integer(kind=our_int), intent(in) :: row_posn_cov_patt(:)
+      integer(kind=our_int), intent(in) :: row_posn_data_patt(:)
+      integer(kind=our_int), intent(in) :: cov_patt_for_data_patt(:)
+      integer(kind=our_int), intent(in) :: logit_prior_int
+      real(kind=our_dble), intent(in) :: crit_em_null
+      real(kind=our_dble), intent(in) :: flatten_em_null
+      real(kind=our_dble), intent(in) :: crit_em
+      real(kind=our_dble), intent(in) :: crit_nr
+      real(kind=our_dble), intent(in) :: crit_em_item
+      real(kind=our_dble), intent(in) :: start_val_jitter
+      real(kind=our_dble), intent(in) :: logit_prior_strength
+      integer(kind=our_int), intent(in) :: iter_max_em_null
+      integer(kind=our_int), intent(in) :: iter_max_em
+      integer(kind=our_int), intent(in) :: iter_max_nr
+      integer(kind=our_int), intent(in) :: iter_max_em_item
+      integer(kind=our_int), intent(in) :: start_val_use_int
+      ! inouts
+      real(kind=our_dble), intent(inout) :: params(:)
+      ! workspaces
+      type(workspace_type_cvam_basic), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! outputs
+      integer(kind=our_int), intent(out) :: iter
+      logical, intent(out) :: converged
+      real(kind=our_dble), intent(out) :: max_diff
+      real(kind=our_dble), intent(out) :: loglik(:)
+      real(kind=our_dble), intent(out) :: logP(:)
+      ! locals
+      logical :: failed
+      integer(kind=our_int) :: ijunk, j, c
+      character(len=*), parameter :: subname = "run_cvam_lcmeas"
+      ! begin
+      answer = RETURN_FAIL
+      work%model_type = "lcmeas"
+      if( put_data_into_basic_workspace( x, ystar, freq_int, &
+           n_levels_matrix, packed_map, work, err ) &
+           == RETURN_FAIL ) goto 800
+       if( setup_lcmeas_workspace( method_int, ncol_x, xcol, &
+            logit_cov_patt, logit_data_patt, n_cov_patt, n_data_patt, &
+            row_posn_cov_patt, row_posn_data_patt, cov_patt_for_data_patt, &
+            baseline, &
+            logit_prior_int, crit_em_null, flatten_em_null, &
+            crit_em, crit_nr, crit_em_item, start_val_jitter, &
+            logit_prior_strength, &
+            iter_max_em_null, iter_max_em, iter_max_nr, iter_max_em_item, &
+            start_val_use_int, params, &
+            work, err ) == RETURN_FAIL ) goto 800
+       if( work%lcmeas%logit_prior == "DAP" ) then
+          do j = 1, work%lcmeas%nitem
+             c = 1
+             failed = .false.
+             if( run_logit_em_null( work, work%lcmeas%logit(c,j), err ) &
+                  == RETURN_FAIL ) failed = .true.
+             if( ( .not. failed ) .and. &
+                  ( .not. work%lcmeas%logit(c,j)%converged_em_null ) ) then
+                call err_handle(err, 1, &
+                     comment = &
+                     "EM algorithm for null model failed to converge by" )
+                call err_handle(err, 5, &
+                     iiter = work%lcmeas%logit(c,j)%iter_em_null )
+                failed = .true.
+             end if
+             if( failed ) then
+                call err_handle(err, 1, &
+                     comment = &
+                     "Marginal proportions for DAP could not be computed" )
+                call err_handle(err, 4, &
+                     ivar = j )
+                goto 800
+             end if
+             do c = 1, work%lcmeas%nclass
+                work%lcmeas%logit(c,j)%prior_freq_cov_patt(:) = &
+                     work%lcmeas%logit(1,j)%pinull_new(:) * &
+                     work%lcmeas%logit(c,j)%prior_freq_tot_DAP / &
+                     real( work%lcmeas%logit(c,j)%n_cov_patt, kind=our_dble )
+             end do
+          end do
+       end if
+
+
+
+
+
+!      if( work%logit%method == "EM" ) then
+!         if( run_logit_em( work, work%logit, err ) == RETURN_FAIL ) goto 800
+!         iter = work%logit%iter_em
+!         converged = work%logit%converged_em
+!         max_diff = work%logit%max_diff_em
+!         work%logit%beta(:) = work%logit%beta_new(:)
+!         if( get_beta_logit( work%logit, beta, err ) == RETURN_FAIL ) goto 800
+!         if( size(loglik) < work%logit%iter_em ) goto 210
+!         loglik(:) = 0.D0
+!         loglik( 1:work%logit%iter_em ) = &
+!              work%logit%loglik_vec( 1:work%logit%iter_em )
+!         if( size(logP) < work%logit%iter_em ) goto 220
+!         logP(:) = 0.D0
+!         logP( 1:work%logit%iter_em ) = &
+!              work%logit%logP_vec( 1:work%logit%iter_em )
+!         if( size(vhat_beta, 1) /= work%logit%d ) goto 230
+!         if( size(vhat_beta, 2) /= work%logit%d ) goto 230
+!         vhat_beta(:,:) = work%logit%vhat_beta(:,:)
+!      else if( work%logit%method == "MCMC" ) then
+!         !
+!      else
+!         goto 100
+!      end if
+
+       iter = 0
+       converged = .false.
+       loglik(:) = 0.D0
+       logp(:) = 0.D0
+       max_diff = 0.D0
+
+      ! normal exit
+      answer = RETURN_SUCCESS
+      goto 999
+      ! error traps
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+      goto 999
+      ! cleanup
+999   continue
+      ijunk = nullify_workspace_type_cvam_basic( work, err )
+    end function run_cvam_lcmeas
+    !##################################################################
+    integer(kind=our_int) function setup_lcmeas_workspace( &
+         method_int, ncol_x, xcol, &
+         logit_cov_patt, logit_data_patt, n_cov_patt, n_data_patt, &
+         row_posn_cov_patt, row_posn_data_patt, cov_patt_for_data_patt, &
+         baseline, &
+         logit_prior_int, crit_em_null, flatten_em_null, &
+         crit_em, crit_nr, crit_em_item, start_val_jitter, &
+         logit_prior_strength, &
+         iter_max_em_null, iter_max_em, iter_max_nr, iter_max_em_item, &
+         start_val_use_int, params, &
+         work, err ) result(answer)
+      implicit none
+      ! declare inputs
+      integer(kind=our_int), intent(in) :: method_int
+      integer(kind=our_int), intent(in) :: ncol_x(:)
+      integer(kind=our_int), intent(in) :: xcol(:)
+      integer(kind=our_int), intent(in) :: logit_cov_patt(:,:)
+      integer(kind=our_int), intent(in) :: logit_data_patt(:,:)
+      integer(kind=our_int), intent(in) :: n_cov_patt(:)
+      integer(kind=our_int), intent(in) :: n_data_patt(:)
+      integer(kind=our_int), intent(in) :: row_posn_cov_patt(:)
+      integer(kind=our_int), intent(in) :: row_posn_data_patt(:)
+      integer(kind=our_int), intent(in) :: cov_patt_for_data_patt(:)
+      integer(kind=our_int), intent(in) :: baseline(:)
+      integer(kind=our_int), intent(in) :: logit_prior_int
+      real(kind=our_dble), intent(in) :: crit_em_null
+      real(kind=our_dble), intent(in) :: flatten_em_null
+      real(kind=our_dble), intent(in) :: crit_em
+      real(kind=our_dble), intent(in) :: crit_nr
+      real(kind=our_dble), intent(in) :: crit_em_item
+      real(kind=our_dble), intent(in) :: start_val_jitter
+      real(kind=our_dble), intent(in) :: logit_prior_strength
+      integer(kind=our_int), intent(in) :: iter_max_em_null
+      integer(kind=our_int), intent(in) :: iter_max_em
+      integer(kind=our_int), intent(in) :: iter_max_nr
+      integer(kind=our_int), intent(in) :: iter_max_em_item
+      integer(kind=our_int), intent(in) :: start_val_use_int
+      real(kind=our_dble), intent(in) :: params(:)
+      ! workspaces
+      type(workspace_type_cvam_basic), intent(inout) :: work
+      type(error_type), intent(inout) :: err
+      ! locals
+      integer(kind=our_int) :: status, j, c, posn, i, k, n, r, p, d, &
+           data_patt, cov_patt, cur_cov_patt, isum, jj, cc, posn2
+      real(kind=our_dble) :: rtmp, log_param, sum
+      character(len=*), parameter :: subname = "setup_lcmeas_workspace"
+      ! begin
+      answer = RETURN_FAIL
+      if( work%model_type /= "lcmeas" ) goto 50
+      if( method_int == 1 ) then
+         work%lcmeas%method = "EM"
+      else if( method_int == 2 ) then
+         work%lcmeas%method = "MCMC"
+      else
+         goto 120
+      end if
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      if( logit_prior_int == 1 ) then
+         work%lcmeas%logit_prior = "none"
+      else if( logit_prior_int == 2 ) then
+         work%lcmeas%logit_prior = "DAP"
+      else
+         goto 150
+      end if
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      work%lcmeas%nrow = work%nrow_data
+      work%lcmeas%nitem = work%ncol_y - 1
+      if( work%lcmeas%nitem < 3 ) goto 105
+      work%lcmeas%nclass = work%n_base_levels( work%ncol_y )
+      if( work%lcmeas%nclass < 2 ) goto 106
+      allocate( work%lcmeas%ycol_item( work%lcmeas%nitem ), &
+           work%lcmeas%mvcode_item( work%lcmeas%nitem ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      do j = 1, work%lcmeas%nitem
+         work%lcmeas%ycol_item(j) = j
+         work%lcmeas%mvcode_item(j) = work%n_levels(j)
+      end do
+      work%lcmeas%ycol_latent = work%ncol_y
+      work%lcmeas%mvcode_latent = work%n_levels( work%ncol_y )
+      !
+      allocate( work%lcmeas%prevalence( work%lcmeas%nclass ), &
+           work%lcmeas%prevalence_new( work%lcmeas%nclass ), &
+           work%lcmeas%post_prob( work%lcmeas%nrow, work%lcmeas%nclass ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      work%lcmeas%prevalence(:) = 0.D0
+      work%lcmeas%prevalence_new(:) = 0.D0
+      work%lcmeas%post_prob(:,:) = 0.D0
+      allocate( work%lcmeas%logit( work%lcmeas%nclass, work%lcmeas%nitem ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      allocate( work%lcmeas%logit_cov_patt( work%lcmeas%nrow, &
+           work%lcmeas%nitem ), &
+           work%lcmeas%logit_data_patt( work%lcmeas%nrow, &
+           work%lcmeas%nitem ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      if( size( logit_cov_patt, 1 ) /= work%lcmeas%nrow ) goto 130
+      if( size( logit_cov_patt, 2 ) /= work%lcmeas%nitem ) goto 130
+      work%lcmeas%logit_cov_patt(:,:) = logit_cov_patt(:,:)
+      if( size( logit_data_patt, 1 ) /= work%lcmeas%nrow ) goto 135
+      if( size( logit_data_patt, 2 ) /= work%lcmeas%nitem ) goto 135
+      work%lcmeas%logit_data_patt(:,:) = logit_data_patt(:,:)
+      !
+      !!! maybe add a check later to make sure that entries in logit_cov_patt
+      !!! and logit_data_patt are valid
+      !
+      if( crit_em <= 0.D0 ) goto 140
+      work%lcmeas%crit_em = crit_em
+      if( iter_max_em < 0 ) goto 141
+      work%lcmeas%iter_max_em = iter_max_em
+      allocate( work%lcmeas%loglikvec( iter_max_em ), &
+           work%lcmeas%logPvec( iter_max_em ), &
+           stat = status )
+      if( status /= 0 ) goto 100
+      work%lcmeas%loglikvec(:) = 0.D0
+      work%lcmeas%logPvec(:) = 0.D0
+      !!!!!!!!!!!!!!!!!
+      !!!!!!!!!!!!!!!!!
+      !!! set up the logit workspaces
+      !!!!!!!!!!!!!!!!!
+      !!!!!!!!!!!!!!!!!
+      do j = 1, work%lcmeas%nitem
+         do c = 1, work%lcmeas%nclass
+            work%lcmeas%logit(c,j)%method = work%lcmeas%method
+            if( logit_prior_int == 1 ) then
+               work%lcmeas%logit(c,j)%prior = "none"
+            else if( logit_prior_int == 2 ) then
+               work%lcmeas%logit(c,j)%prior = "DAP"
+            else
+               goto 150
+            end if
+            work%lcmeas%logit(c,j)%nrow = work%nrow_data
+            work%lcmeas%logit(c,j)%nlev = work%nlev(j)
+         end do
+      end do
+      !
+      if( size(ncol_x) /= work%lcmeas%nitem ) goto 180
+      posn = 0
+      do j = 1, work%lcmeas%nitem
+         if( ncol_x(j) < 1 ) goto 200
+         do c = 1, work%lcmeas%nclass
+            work%lcmeas%logit(c,j)%ncol_x = ncol_x(j)
+            allocate( work%lcmeas%logit(c,j)%xcol( ncol_x(j) ), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+         end do
+         do i = 1, ncol_x(j)
+            posn = posn + 1
+            if( posn > size(xcol) ) goto 220
+            if( xcol(posn) < 1 ) goto 230
+            if( xcol(posn) > work%ncol_pred ) goto 230
+            do c = 1, work%lcmeas%nclass
+               work%lcmeas%logit(c,j)%xcol(i) = xcol(posn)
+            end do
+         end do
+      end do
+      ! 
+      if( size(n_cov_patt) /= work%lcmeas%nitem ) goto 280
+      posn = 0
+      do j = 1, work%lcmeas%nitem
+         if( n_cov_patt(j) < 1 ) goto 300
+         do c = 1, work%lcmeas%nclass
+            work%lcmeas%logit(c,j)%n_cov_patt = n_cov_patt(j)
+            allocate( work%lcmeas%logit(c,j)%row_posn_cov_patt( &
+                 n_cov_patt(j) ), stat = status )
+            if( status /= 0 ) goto 100
+         end do
+         do i = 1, n_cov_patt(j)
+            posn = posn + 1
+            if( posn > size(row_posn_cov_patt) ) goto 320
+            if( row_posn_cov_patt(posn) < 1 ) goto 330
+            if( row_posn_cov_patt(posn) > work%nrow_data ) goto 330
+            do c = 1, work%lcmeas%nclass
+               work%lcmeas%logit(c,j)%row_posn_cov_patt(i) = &
+                    row_posn_cov_patt(posn)
+            end do
+         end do
+      end do
+      !
+      if( size(n_data_patt) /= work%lcmeas%nitem ) goto 380
+      posn = 0
+      do j = 1, work%lcmeas%nitem
+         if( n_data_patt(j) < 1 ) goto 400
+         do c = 1, work%lcmeas%nclass
+            work%lcmeas%logit(c,j)%n_data_patt = n_data_patt(j)
+            allocate( &
+                 work%lcmeas%logit(c,j)%row_posn_data_patt( &
+                 n_data_patt(j) ), &
+                 work%lcmeas%logit(c,j)%cov_patt_for_data_patt( &
+                 n_data_patt(j) ), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+         end do
+         do i = 1, n_data_patt(j)
+            posn = posn + 1
+            if( posn > size(row_posn_data_patt) ) goto 420
+            if( posn > size(cov_patt_for_data_patt) ) goto 425
+            if( row_posn_data_patt(posn) < 1 ) goto 430
+            if( row_posn_data_patt(posn) > work%nrow_data ) goto 430
+            if( cov_patt_for_data_patt(posn) < 1 ) goto 435
+            if( cov_patt_for_data_patt(posn) > n_cov_patt(j) ) goto 435
+            do c = 1, work%lcmeas%nclass
+               work%lcmeas%logit(c,j)%row_posn_data_patt(i) = &
+                    row_posn_data_patt(posn)
+               work%lcmeas%logit(c,j)%cov_patt_for_data_patt(i) = &
+                    cov_patt_for_data_patt(posn)
+            end do
+         end do
+      end do
+      !
+      if( size(baseline) /= work%lcmeas%nitem ) goto 450
+      do j = 1, work%lcmeas%nitem
+         do c = 1, work%lcmeas%nclass
+            work%lcmeas%logit(c,j)%ycol = j
+            n = work%lcmeas%logit(c,j)%nrow
+            r = work%lcmeas%logit(c,j)%nlev
+            p = work%lcmeas%logit(c,j)%ncol_x
+            d = p * (r - 1)
+            work%lcmeas%logit(c,j)%n = n
+            work%lcmeas%logit(c,j)%r = r
+            work%lcmeas%logit(c,j)%p = p
+            work%lcmeas%logit(c,j)%d = d
+            if( baseline(j) < 1 ) goto 460 
+            if( baseline(j) > r ) goto 460
+            work%lcmeas%logit(c,j)%baseline = baseline(j)
+            allocate( &
+                 work%lcmeas%logit(c,j)%beta(d), &
+                 work%lcmeas%logit(c,j)%pimat( n_cov_patt(j), r ), &
+                 work%lcmeas%logit(c,j)%pinull(r), &
+                 work%lcmeas%logit(c,j)%pinull_new(r), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+            work%lcmeas%logit(c,j)%beta(:) = 0.D0
+            work%lcmeas%logit(c,j)%pimat(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%pinull(:) = 0.D0
+            work%lcmeas%logit(c,j)%pinull_new(:) = 0.D0
+            allocate( &
+                 work%lcmeas%logit(c,j)%freq_int_data_patt( n_data_patt(j) ), &
+                 work%lcmeas%logit(c,j)%freq_data_patt( n_data_patt(j) ), &
+                 work%lcmeas%logit(c,j)%pistar_data_patt( n_data_patt(j) ), &
+                 work%lcmeas%logit(c,j)%data_patt_st( n_cov_patt(j) ), &
+                 work%lcmeas%logit(c,j)%data_patt_fin( n_cov_patt(j) ), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+            work%lcmeas%logit(c,j)%freq_int_data_patt(:) = 0
+            work%lcmeas%logit(c,j)%freq_data_patt(:) = 0.D0
+            work%lcmeas%logit(c,j)%pistar_data_patt(:) = 0.D0
+            work%lcmeas%logit(c,j)%pistar_data_patt(:) = 0.D0
+            !
+            cur_cov_patt = 0
+            posn = 0
+            do data_patt = 1, n_data_patt(j)
+               cov_patt = &
+                    work%lcmeas%logit(c,j)%cov_patt_for_data_patt( data_patt )
+               if( cov_patt /= cur_cov_patt ) then
+                  posn = posn + 1
+                  cur_cov_patt = cov_patt
+                  if( posn > n_cov_patt(j) ) goto 470
+                  work%lcmeas%logit(c,j)%data_patt_st( posn ) = data_patt
+               end if
+            end do
+            if( posn /= n_cov_patt(j) ) goto 480
+            do posn = 2, n_cov_patt(j)
+               work%lcmeas%logit(c,j)%data_patt_fin( posn - 1 ) = &
+                    work%lcmeas%logit(c,j)%data_patt_st( posn ) - 1
+            end do
+            work%lcmeas%logit(c,j)%data_patt_fin( n_cov_patt(j) ) = &
+                 n_data_patt(j)
+            !
+            if( crit_em_null <= 0.D0 ) goto 500
+            work%lcmeas%logit(c,j)%crit_em_null = crit_em_null 
+            if( flatten_em_null < 0.D0 ) goto 510
+            work%lcmeas%logit(c,j)%flatten_em_null = flatten_em_null
+            if( iter_max_em_null < 0 ) goto 520
+            work%lcmeas%logit(c,j)%iter_max_em_null = iter_max_em_null
+            if( work%lcmeas%logit(c,j)%prior == "DAP" ) then
+               if( logit_prior_strength < 0.D0 ) goto 525
+               work%lcmeas%logit(c,j)%prior_freq_tot_DAP = &
+                    real(d, our_dble) * logit_prior_strength
+            else
+               work%lcmeas%logit(c,j)%prior_freq_tot_DAP = 0.D0
+            end if
+            !
+            if( crit_em_item <= 0.D0 ) goto 540
+            work%lcmeas%logit(c,j)%crit_em = crit_em_item
+            if( crit_nr <= 0.D0 ) goto 541
+            work%lcmeas%logit(c,j)%crit_nr = crit_nr
+            if( iter_max_em_item < 0 ) goto 550
+            work%lcmeas%logit(c,j)%iter_max_em = iter_max_em_item
+            if( iter_max_nr < 0 ) goto 551
+            work%lcmeas%logit(c,j)%iter_max_nr = iter_max_nr
+            !
+            allocate( &
+                 work%lcmeas%logit(c,j)%loglik_vec( iter_max_em_item ), &
+                 work%lcmeas%logit(c,j)%logP_vec( iter_max_em_item ), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+            work%lcmeas%logit(c,j)%loglik_vec(:) = 0.D0
+            work%lcmeas%logit(c,j)%logP_vec(:) = 0.D0
+            !
+            allocate( &
+                 work%lcmeas%logit(c,j)%beta_new(d), &
+                 work%lcmeas%logit(c,j)%beta_nr(d), &
+                 work%lcmeas%logit(c,j)%beta_nr_new(d), &
+                 work%lcmeas%logit(c,j)%beta_tmp(d), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+            work%lcmeas%logit(c,j)%loglik = 0.D0
+            work%lcmeas%logit(c,j)%loglik_A = 0.D0
+            work%lcmeas%logit(c,j)%logprior = 0.D0
+            allocate( &
+                 work%lcmeas%logit(c,j)%prior_freq_cov_patt(r), &
+                 work%lcmeas%logit(c,j)%log_pi_cov_patt(r), &
+                 work%lcmeas%logit(c,j)%score(d), &
+                 work%lcmeas%logit(c,j)%score_A(d), &
+                 work%lcmeas%logit(c,j)%hess(d,d), &
+                 work%lcmeas%logit(c,j)%hess_A(d,d), &
+                 work%lcmeas%logit(c,j)%freq_data_patt_expected( &
+                    n_data_patt(j), r ), &
+                 work%lcmeas%logit(c,j)%freq_cov_patt_expected(r), &
+                 work%lcmeas%logit(c,j)%active_y(r), &
+                 work%lcmeas%logit(c,j)%vhat_beta(d,d), &
+                 work%lcmeas%logit(c,j)%dldpi(r), &
+                 work%lcmeas%logit(c,j)%dldpi_A(r), &
+                 work%lcmeas%logit(c,j)%dpidbeta(r,d), &
+                 work%lcmeas%logit(c,j)%d2ldpi2(r,r), &
+                 work%lcmeas%logit(c,j)%d2ldpi2_A(r,r), &
+                 work%lcmeas%logit(c,j)%d2pidbeta2(r,d,d), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+            work%lcmeas%logit(c,j)%prior_freq_cov_patt(:) = 0.D0
+            work%lcmeas%logit(c,j)%log_pi_cov_patt(:) = 0.D0
+            work%lcmeas%logit(c,j)%score(:) = 0.D0
+            work%lcmeas%logit(c,j)%score_A(:) = 0.D0
+            work%lcmeas%logit(c,j)%hess(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%hess_A(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%freq_data_patt_expected(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%freq_cov_patt_expected(:) = 0.D0
+            work%lcmeas%logit(c,j)%active_y(:) = .false.
+            work%lcmeas%logit(c,j)%vhat_beta(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%dldpi(:) = 0.D0
+            work%lcmeas%logit(c,j)%dldpi_A(:) = 0.D0
+            work%lcmeas%logit(c,j)%dpidbeta(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%d2ldpi2(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%d2ldpi2_A(:,:) = 0.D0
+            work%lcmeas%logit(c,j)%d2pidbeta2(:,:,:) = 0.D0
+            allocate( work%lcmeas%logit(c,j)%wkrA( r ), &
+                 work%lcmeas%logit(c,j)%wkrB(r), &
+                 work%lcmeas%logit(c,j)%wkdA(d), &
+                 work%lcmeas%logit(c,j)%wkdB(d), &
+                 work%lcmeas%logit(c,j)%wkddA(d,d), &
+                 work%lcmeas%logit(c,j)%wkddB(d,d), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+         end do
+      end do
+      ! tabulate marginal frequencies for each item
+      do j = 1, work%lcmeas%nitem
+         do c = 1, work%lcmeas%nclass
+            allocate( &
+                 work%lcmeas%logit(c,j)%ystar_table( work%n_levels(j) ), &
+                 stat = status )
+            if( status /= 0 ) goto 100
+         end do
+         c = 1
+         work%lcmeas%logit(c,j)%ystar_table(:) = 0
+         do i = 1, work%nrow_data
+            k = work%ystar(i,j)
+            if( k < 1 ) goto 210
+            if( k > work%n_levels(j) ) goto 210
+            work%lcmeas%logit(c,j)%ystar_table(k) = &
+                 work%lcmeas%logit(c,j)%ystar_table(k) + &
+                 work%data_freq_int(i)
+         end do
+         do c = 2, work%lcmeas%nclass
+            work%lcmeas%logit(c,j)%ystar_table(:) = &
+                 work%lcmeas%logit(1,j)%ystar_table(:)
+         end do
+      end do
+      ! handle starting values
+      isum = work%lcmeas%nclass
+      do j = 1, work%lcmeas%nitem
+         isum = isum + work%lcmeas%nclass * ncol_x(j) * &
+              ( work%lcmeas%nclass - 1 )
+      end do
+      if( size( params ) /= isum ) goto 620
+      work%lcmeas%nparams = isum
+      if( start_val_use_int == 0 ) then
+         ! assign uniform prevalences
+         work%lcmeas%prevalence_new(:) = 1.D0 / &
+              real( work%lcmeas%nclass, our_dble )
+         ! set coefficients to zero
+         do c = 1, work%lcmeas%nclass
+            do j = 1, work%lcmeas%nitem
+               work%lcmeas%logit(c,j)%beta_new(:) = 0.D0
+               work%lcmeas%logit(c,j)%start_val_use = .false.
+            end do
+         end do
+      else if( start_val_use_int == 1 ) then
+         do c = 1, work%lcmeas%nclass
+            work%lcmeas%prevalence_new(c) = params(c)
+         end do
+         posn = work%lcmeas%nclass
+         do c = 1, work%lcmeas%nclass
+            do j = 1, work%lcmeas%nitem
+               posn2 = 0
+               do cc = 1, work%lcmeas%nclass
+                  if( cc == work%lcmeas%logit(c,j)%baseline ) cycle
+                  do jj = 1, work%lcmeas%logit(c,j)%p
+                     posn = posn + 1
+                     posn2 = posn2 + 1
+                     work%lcmeas%logit(c,j)%beta_new(posn2) = params(posn)
+                  end do
+               end do
+            end do
+         end do
+      else
+         goto 650
+      end if
+      ! jitter starting values
+      if( start_val_jitter < 0.D0 ) goto 660
+      work%lcmeas%start_val_jitter = start_val_jitter
+      sum = 0.D0
+      do c = 1, work%lcmeas%nclass
+         if( work%lcmeas%prevalence_new(c) <= 0.D0 ) goto 670
+         log_param = log( work%lcmeas%prevalence_new(c) )
+         if( rnorm_R( rtmp, err ) == RETURN_FAIL ) goto 800
+         log_param = log_param + rtmp * work%lcmeas%start_val_jitter
+         if( log_param < log_tiny ) goto 710
+         if( log_param > log_huge ) goto 720
+         work%lcmeas%prevalence_new(c) = exp( log_param )
+         sum = sum + work%lcmeas%prevalence_new(c)
+      end do
+      do c = 1, work%lcmeas%nclass
+         work%lcmeas%prevalence_new(c) = work%lcmeas%prevalence_new(c) / sum
+      end do
+      if( work%lcmeas%start_val_jitter > 0.D0 ) then
+         do c = 1, work%lcmeas%nclass
+            do j = 1, work%lcmeas%nitem
+               posn2 = 0
+               do cc = 1, work%lcmeas%nclass
+                  if( cc == work%lcmeas%logit(c,j)%baseline ) cycle
+                  do jj = 1, work%lcmeas%logit(c,j)%p
+                     posn2 = posn2 + 1
+                     if( rnorm_R( rtmp, err ) == RETURN_FAIL ) goto 800
+                     work%lcmeas%logit(c,j)%beta_new(posn2) = &
+                          work%lcmeas%logit(c,j)%beta_new(posn2) + &
+                          rtmp * work%lcmeas%start_val_jitter
+                  end do
+               end do
+            end do
+         end do
+      end if
+      ! normal exit
+      answer = RETURN_SUCCESS
+      goto 999
+      ! error traps
+50    call err_handle(err, 1, &
+           comment = "This is not an lcmeas model" )
+      goto 800
+100   call err_handle(err, 1, &
+           comment = "Unable to allocate workspace array component" )
+      goto 800
+105   call err_handle(err, 1, &
+           comment = "Fewer than three measurement items" )
+      goto 800
+106   call err_handle(err, 1, &
+           comment = "Fewer than two latent classes" )
+      goto 800
+120   call err_handle(err, 1, &
+           comment = "Value of method not recognized" )
+      goto 800
+130   call err_handle(err, 1, &
+           comment = "Array logit_cov_patt has incorrect size" )
+      goto 800
+135   call err_handle(err, 1, &
+           comment = "Array logit_data_patt has incorrect size" )
+      goto 800
+140   call err_handle(err, 1, &
+           comment = "Non-positive value for crit_em" )
+      goto 800
+141   call err_handle(err, 1, &
+           comment = "Negative value for iter_max_em" )
+      goto 800
+150   call err_handle(err, 1, &
+           comment = "Value of logit_prior_int not recognized" )
+      goto 800
+180   call err_handle(err, 1, &
+           comment = "Array ncol_x has incorrect size" )
+      goto 800
+200   call err_handle(err, 1, &
+           comment = "Element of ncol_x not valid; must be at least 1" )
+      goto 800
+210   call err_handle(err, 1, &
+           comment = "Element of ystar out of range" )
+      goto 800
+220   call err_handle(err, 1, &
+           comment = "Bounds exceeded on array xcol" )
+      goto 800
+230   call err_handle(err, 1, &
+           comment = "Element of xcol out of range; exceeds bounds of pred" )
+      goto 800
+280   call err_handle(err, 1, &
+           comment = "Array n_cov_patt has incorrect size" )
+      goto 800
+300   call err_handle(err, 1, &
+           comment = "Element of n_cov_patt not valid; must be at least 1" )
+      goto 800
+320   call err_handle(err, 1, &
+           comment = "Bounds exceeded on array row_posn_cov_patt" )
+      goto 800
+330   call err_handle(err, 1, &
+           comment = "Element of row_posn_cov_patt out of range" )
+      goto 800
+380   call err_handle(err, 1, &
+           comment = "Array n_data_patt has incorrect size" )
+      goto 800
+400   call err_handle(err, 1, &
+           comment = "Element of n_data_patt not valid; must be at least 1" )
+      goto 800
+420   call err_handle(err, 1, &
+           comment = "Bounds exceeded on array row_posn_data_patt" )
+      goto 800
+425   call err_handle(err, 1, &
+           comment = "Bounds exceeded on array cov_patt_for_data_patt" )
+      goto 800
+430   call err_handle(err, 1, &
+           comment = "Element of row_posn_data_patt out of range" )
+      goto 800
+435   call err_handle(err, 1, &
+           comment = "Element of cov_patt_for_data_patt out of range" )
+      goto 800
+450   call err_handle(err, 1, &
+           comment = "Array baseline has incorrect size" )
+      goto 800
+460   call err_handle(err, 1, &
+           comment = "Element of baseline out of range" )
+      goto 800
+470   call err_handle(err, 1, &
+           comment = "Array bounds exceeded for data_patt_st" )
+      goto 800
+480   call err_handle(err, 1, &
+           comment = "Bad data in cov_patt_for_data_patt" ) 
+      goto 800
+500   call err_handle(err, 1, &
+           comment = "Non-positive value for crit_em_null" )
+      goto 800
+510   call err_handle(err, 1, &
+           comment = "Negative value for flatten_em_null" )
+      goto 800
+520   call err_handle(err, 1, &
+           comment = "Negative value for iter_max_em_null" )
+      goto 800
+525   call err_handle(err, 1, &
+           comment = "Negative value for logit_prior_strength" )
+      goto 800
+540   call err_handle(err, 1, &
+           comment = "Non-positive value for crit_em_item" )
+      goto 800
+541   call err_handle(err, 1, &
+           comment = "Non-positive value for crit_nr" )
+      goto 800
+550   call err_handle(err, 1, &
+           comment = "Negative value for iter_max_em_item" )
+      goto 800
+551   call err_handle(err, 1, &
+           comment = "Negative value for iter_max_nr" )
+      goto 800
+620   call err_handle(err, 1, &
+           comment = "Array params has incorrect size" )
+      goto 800
+650   call err_handle(err, 1, &
+           comment = "Value of start_val_use_int not recognized" )
+      goto 800
+660   call err_handle(err, 1, &
+           comment = "Negative value provided for start_val_jitter" )
+      goto 800
+670   call err_handle(err, 1, &
+           comment = "Value supplied for class prevalence is not positive" )
+      goto 800
+710   call err_handle(err, 1, &
+            comment = "Underflow; jittered cell prob became zero" )
+      call err_handle(err, 15, icell = i )
+      goto 800
+720   call err_handle(err, 1, &
+            comment = "Overflow; jittered cell prob became too large" )
+      call err_handle(err, 15, icell = i )
+      goto 800
+800   call err_handle(err, 2, whichsub = subname, whichmod = modname )
+      goto 999
+      ! cleanup
+999   continue
+    end function setup_lcmeas_workspace
+    !##################################################################
+    integer(kind=our_int) function get_lcmeas_params( lcmeas, params, &
+         err ) result(answer)
+       implicit none
+       ! args
+       type(workspace_type_cvam_lcmeas), intent(inout) :: lcmeas
+       real(kind=our_dble), intent(out) :: params(:)
+       type(error_type), intent(inout) :: err
+       ! locals
+       integer(kind=our_int) :: posn, posn2, j, c, jj, cc
+       character(len=*), parameter :: &
+            subname = "get_lcmeas_params"
+       ! begin
+       answer = RETURN_FAIL
+       !####
+       if( size(params) /= lcmeas%nparams ) goto 100
+       do c = 1, lcmeas%nclass
+          params(c) = lcmeas%prevalence(c)
+       end do
+       posn = lcmeas%nclass
+       do c = 1, lcmeas%nclass
+          do j = 1, lcmeas%nitem
+             posn2 = 0
+             do cc = 1, lcmeas%nclass
+                if( cc == lcmeas%logit(c,j)%baseline ) cycle
+                do jj = 1, lcmeas%logit(c,j)%p
+                   posn = posn + 1
+                   posn2 = posn2 + 1
+                   params(posn) = lcmeas%logit(c,j)%beta(posn2)
+                end do
+             end do
+          end do
+       end do
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+100    call err_handle(err, 1, &
+            comment = "Array params has incorrect size" )
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function get_lcmeas_params
+    !##################################################################
+    integer(kind=our_int) function update_lcmeas_params( lcmeas, &
+         err ) result(answer)
+       implicit none
+       ! args
+       type(workspace_type_cvam_lcmeas), intent(inout) :: lcmeas
+       type(error_type), intent(inout) :: err
+       ! locals
+       integer(kind=our_int) :: j, c
+       character(len=*), parameter :: &
+            subname = "update_lcmeas_params"
+       ! begin
+       answer = RETURN_FAIL
+       !####
+       lcmeas%prevalence(:) = lcmeas%prevalence_new(:)
+       do c = 1, lcmeas%nclass
+          do j = 1, lcmeas%nitem
+             lcmeas%logit(c,j)%beta(:) = lcmeas%logit(c,j)%beta_new(:)
+          end do
+       end do
+       ! normal exit
+       answer = RETURN_SUCCESS
+       goto 999
+       ! error traps
+       goto 800
+800    call err_handle(err, 2, whichsub = subname, whichmod = modname )
+       goto 999
+       ! cleanup
+999    continue
+     end function update_lcmeas_params
     !##################################################################
  end module cvam_engine
 !#####################################################################

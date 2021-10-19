@@ -3537,7 +3537,7 @@ second derivative can be written as
 \left( \frac{\partial\bmu}{\partial\bbeta^\top} \right).
 \label{eq:d2chainrule}
 \end{equation}
-But $\partial^2\log P/\partial\beta_j\,\partial\beta_k = 
+But $\partial^2\log \mu_\bvsub/\partial\beta_j\,\partial\beta_k = 
 \mu_\bvsub\,x_{\bvsub,j}\,x_{\bvsub,k}$, so
 $\partial^2\mu_\bvsub/\partial\bbeta\,\partial\bbeta^\top =
 \mu_\bvsub\,\bx_{\bvsub}\,\bx_{\bvsub}^\top$, and the first term in
@@ -3547,9 +3547,9 @@ $\partial^2\mu_\bvsub/\partial\bbeta\,\partial\bbeta^\top =
 \left( \frac{\partial\log P}{\partial\mu_\bvsub} \right)
 \left( \frac{\partial^2\mu_\bvsub}{\partial\bbeta\partial\bbeta^\top}
 \right) \,=\,
-\bX^\top \mbox{diag}( \hat{\mbox{\boldmath $f$}} - \bmu ) \,\bX,
+\bX^\top \mbox{diag}( \hat{\mbox{\boldmath $f$}} - \bmu ) \,\bX.
 \]
-which also vanishes at the EM solution. With some algebra, the second
+With some algebra, the second
 term in (\ref{eq:d2chainrule}) can be written as
 \[
 \left( \frac{\partial\bmu}{\partial\bbeta^\top} \right)^{\!\!\top} \!\!

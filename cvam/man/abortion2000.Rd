@@ -20,50 +20,56 @@ The data frame also includes variables on age, sex, race, Hispanic
 origin, education, religious and political affiliation.  A second race
 item, which was modeled after the race question on the U.S. Census
 questionnaire, was given to a random half-sample.
+
+In general, analyses of GSS data should account for the complex sample
+design. Sample weights, stratum and cluster indicators are included
+for this purpose.
 }
 
 \usage{abortion2000}
 
-\format{a data frame with 2,817 rows and 16 factors:
+\format{a data frame with 2,817 rows and 19 variables:
 
 \describe{    
 
-    \item{\code{Age}}{respondent's age, with levels \code{"18-29"},
+    \item{\code{Age}}{respondent's age, a factor with levels \code{"18-29"},
     \code{"30-49"}, \code{"50-64"}, and \code{"65+"}}
 
-    \item{\code{Sex}}{respondent's sex, coded as \code{"Female"} or
-    \code{"Male"}} 
+    \item{\code{Sex}}{respondent's sex, a factor with levels
+    \code{"Female"} and \code{"Male"}} 
 
-    \item{\code{Race}}{respondent's race, coded as \code{"White"},
-    \code{"Black"}, or \code{"Other"}; see NOTE below}
+    \item{\code{Race}}{respondent's race, a factor with levels \code{"White"},
+    \code{"Black"}, and \code{"Other"}; see NOTE below}
 
-    \item{\code{CenRace}}{respondent's race, coded as \code{"White"},
-    \code{"Black"}, \code{"Hisp"} or \code{"Other"}; see NOTE below}
+    \item{\code{CenRace}}{respondent's race, a factor with levels
+    \code{"White"}, \code{"Black"}, \code{"Hisp"} and \code{"Other"};
+    see NOTE below} 
 
-    \item{\code{Hisp}}{respondent's Hispanic classification, with levels
-    \code{"nonHisp"} and \code{"Hisp"}}
+    \item{\code{Hisp}}{respondent's Hispanic classification, a factor
+    with levels \code{"nonHisp"} and \code{"Hisp"}}
 
-    \item{\code{Degree}}{respondent's education, classified as
+    \item{\code{Degree}}{respondent's education, a factor with levels
     \code{"<HS"} (did not finish high school),
     \code{"HS"} (high school diploma), \code{"JunCol"} (junior
-    college), \code{"Bach"} (Bacheor's degree), or \code{"Grad"}
+    college), \code{"Bach"} (Bacheor's degree), and \code{"Grad"}
     (graduate degree)} 
 
-    \item{\code{Relig}}{respondent's religious preference, classified as
-    \code{"Prot"} (Protestant),
-    \code{"Cath"} (Roman Catholic), \code{"Jewish"}, \code{"None"}, or
+    \item{\code{Relig}}{respondent's religious preference, a factor
+    with levels \code{"Prot"} (Protestant),
+    \code{"Cath"} (Roman Catholic), \code{"Jewish"}, \code{"None"}, and
     \code{"Other"}} 
 
-    \item{\code{Party}}{respondent's political party identification, with levels
+    \item{\code{Party}}{respondent's political party identification, a
+    factor with levels
     \code{"Dem"} (Democrat), \code{"Rep"} (Republican), and
     \code{"Ind/Oth"} (Independent or Other); see NOTE below}
 
-    \item{\code{PolViews}}{respondent's political views, with levels
-    \code{"Con"} (Conservative), \code{"Mod"} (Moderate), and \code{"Lib"}
-    (Liberal)}
+    \item{\code{PolViews}}{respondent's political views, a factor with
+    levels \code{"Con"} (Conservative), \code{"Mod"} (Moderate), and
+    \code{"Lib"} (Liberal)}
 }
 
-Each of the seven variables below is a factor with levels
+Each of the next seven variables below is a factor with levels
 \code{"Yes"}, \code{"No"}, and \code{"DK"} (don't know). The items
  were prefixed by, ``Please tell me whether or not you think it
 should be possible for a pregnant woman to obtain a legal abortion
@@ -92,6 +98,25 @@ if...''
     \item{\code{AbAny}}{``...The woman wants it for any reason?''}
 
 }
+
+The three variables below may be used to compute estimates and
+standard errors that account for the survey's complex sample design:
+
+\describe{
+
+    \item{\code{WTSSALL}}{numeric sampling weight,
+    inversely proportional to the individual's probability of
+    being selected into the sample}
+
+    \item{\code{VSTRAT}}{integer code identifying the stratum for
+    variance estimation} 
+
+    \item{\code{VPSU}}{integer code identifying the primary sampling
+    unit (PSU) (i.e., the primary cluster) within stratum for variance
+    estimation; see NOTE below}
+
+}
+
 }
 
 \note{
@@ -111,9 +136,13 @@ who chose ``Some other race'' and described themselves as Hispanic,
 Latino, Latina, or something similar.
 
 \code{Party} is based on the GSS variable \code{partyid}. Level
-\code{"Dem"} includes Decocrat-leaning Independents, and 
+\code{"Dem"} includes Democrat-leaning Independents, and 
 \code{"Rep"} includes Republican-leaning Independents.
 
+The cluster identifier \code{VPSU} is nested within the stratum
+identifier \code{VSTRAT}; for example, \code{VPSU == 1} in
+\code{VSTRAT == 1644} and \code{VPSU == 1} in \code{VSTRAT == 1645}
+represent different clusters.
 }
 
 \source{

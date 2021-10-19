@@ -13,6 +13,7 @@ cvam ChangeLog
 	* created fitLCPrev
 
 04-29-2020
+
 	* fixed run_mlogit to return final beta_vec
 
 04-30-2020
@@ -26,10 +27,29 @@ cvam ChangeLog
 05-18-2020
 	* fixed false convergence problem in fitLCPrev
 
+03-08-2021
+	* added sampling weights, stratum and cluster indicators to
+	abortion2000 data
+	* added cig2018 data
+
+03-22-2021
+	* revised cvam.formula and cvam.cvam to specify staring values in
+	terms of mu when saturated=TRUE
+	* changed EM convergence criteria when saturated=TRUE to focus on mu
+	* fixed evaluation of loglikelihood in conditional models when
+	saturated=TRUE
+
 09-30-2021
 	* fixed DESCRIPTION and vignettes to address issues from CRAN
 
-10-01=2021
+10-01-2021
 	* fixed bug in cvamPredict
 	* changed DESCRIPTION to no longer suggest sticky
 
+10-13-2021
+	* replaced .Rout.save files with new versions
+	* converted .rda data files to "xz" compression
+
+10-18-2021
+	* fixed bug in cvam computation of standard errors when zero
+	frequencies are present

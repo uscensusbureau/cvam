@@ -10,3 +10,11 @@ CHANGES IN version 0.9.1
 
    * fixed bug in cvamPredict when one variable is being predicted
 
+CHANGES IN version 0.9.2
+
+   * added survey design variables to cig2019 and abortion2000
+   * fixed bug in cvam computation of standard errors when zero
+     frequencies are present
+
+
+

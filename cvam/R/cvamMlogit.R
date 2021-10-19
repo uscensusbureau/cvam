@@ -1,3 +1,5 @@
+# undocumented functions, not exported
+
 cvamMlogit.fit <- function( x, y, baseline=1L, criterion=1e-06,
    iterMax=25L ) {
    stopifnot( NROW(x) == NROW(y) )

@@ -23,7 +23,8 @@ or coarsened values.
 % the generic function
 cvam(obj, ...)
 
-\method{cvam}{formula}(obj, data, freq, prior = cvamPrior(),
+\method{cvam}{formula}(obj, data, freq, weight, subPop, 
+    stratum, cluster, nest = FALSE, prior = cvamPrior(),
     method = c("EM", "MCMC", "approxBayes", "mfSeen", "mfTrue",
        "mfPrior", "modelMatrix"), control = list(), omitData = FALSE,
     saturated = FALSE, modelMatrix = NULL, offset = NULL,
@@ -49,12 +50,36 @@ cvam(obj, ...)
   observations are assumed to represent microdata, and all frequencies
   are set to one.}
 
+  \item{weight}{an optional numeric variable containing survey weights, which
+  are used when computing pseudo-maximum likelihood (PML) estimates
+  from survey data. If \code{weight} is given, then the data supplied
+  are interpreted as microdata, with each row having a frequency of
+  one.}
+
+  \item{subPop}{an optional logical variable indicating membership in
+  a subpopulation for computing PML estimates from survey data.}
+
+  \item{stratum}{an optional variable indicating the sampling
+  stratum to which a unit belongs, used when computing linearized
+  variance estimates for parameter estimates under a with-replacement
+  (WR) survey design; see DETAILS.}
+
+  \item{cluster}{an optional factor variable indicating the primary
+  (first-stage) sampling cluster to which a unit belongs, used when
+  computing linearized variance estimates for parameters under a
+  with-replacement (WR) survey design; see DETAILS.} 
+
+  \item{nest}{if TRUE, duplicate values of the cluster variable
+  appearing in different strata are assumed to refer to different
+  clusters.} 
+
   \item{prior}{an object produced by \code{\link{cvamPrior}} to
   represent prior information incorporated into the model fit.}
 
   \item{method}{a procedure for fitting the model:
   \code{"EM"} computes a maximum-likelihood (ML) estimate, penalized
-  ML estimate, or posterior mode; \code{"MCMC"} runs a Markov chain
+  ML estimate, posterior mode, or (if survey weights are provided) a
+  pseudo-maximum likelihood (PML) estimate; \code{"MCMC"} runs a Markov chain
   Monte Carlo algorithm to simulate a sequence of correlated random
   draws from the posterior distribution of the unknown parameters;
   \code{"approxBayes"} creates independent draws from an approximate
@@ -135,6 +160,24 @@ argument, then the data, model and prior distribution will be
 taken from the previous run, and (unless \code{startVal} is
 supplied), starting values will be set to the final parameter values
 from the previous run. 
+
+If \code{method} is \code{"EM"} and survey weights are supplied
+through \code{weight}, then \code{cvam} performs pseudo-maximum
+likelihood (PML) estimation. The target of PML is the set of
+parameters that would be obtained if the given model were fit to all
+units in the finite population (or, if \code{subPop} is given, the
+subpopulation). If \code{saturated=FALSE}, then 
+standard errors for log-linear coefficients are computed using a
+linearization method that assumes the first stage of sampling within
+strata was carried out with replacement (WR). Although WR sampling is
+rarely done in actual surveys, it is often assumed for 
+variance estimation, and if the first-stage sampling was actually done
+without replacement the resulting standard errors tend to be
+conservative. The WR survey design information is provided through 
+\code{weight}, \code{stratum} and \code{cluster}. The \code{stratum}
+and \code{cluster} variables are coerced to factors. If \code{stratum}
+is omitted, then the population is regarded as a single stratum. If
+\code{cluster} is omitted, then each sample unit is treated as a cluster.
 }
 
 \value{if \code{method} is \code{"EM"}, \code{"MCMC"} or

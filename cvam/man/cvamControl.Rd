@@ -93,7 +93,7 @@ cvamControl( iterMaxEM = 500L, iterMaxNR = 50L,
   \item{critNR}{convergence criterion for Newton-Raphson stopping rule
   in M-step of EM; see DETAILS.}
 
-  \item{critBoundary}{criterion for testing whether estimated probabilities
+  \item{critBoundary}{criterion for testing whether any estimated cell means
   are close to zero, in which case a warning is given.}
 
   \item{ncolMaxMM}{limit on the number of columns allowed for a
@@ -168,7 +168,7 @@ function \code{cvam}.
 \author{Joe Schafer \email{Joseph.L.Schafer@census.gov} }
 
 \seealso{
-\code{cvam}
+\code{\link{cvam}}
 }
 
 \examples{
